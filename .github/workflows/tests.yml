@@ -1,0 +1,36 @@
+name: tests
+
+# The tests run the mods' own functions with stubs, so no Herdr is needed.
+# `herdr-app check` is the other half and needs a running app; run it locally.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: mod tests
+        run: |
+          for test in tests/*.test.mjs; do
+            printf '%-28s ' "$test"
+            node "$test" | tail -1
+          done
+      - name: install into a scratch Herdr home
+        run: |
+          mkdir -p /tmp/herdr-home
+          HERDR_APP_HOME=/tmp/herdr-home ./install.sh
+          test -f /tmp/herdr-home/layouts/workspace.json
+          test -d /tmp/herdr-home/mods/search
+          python3 - <<'PY'
+          import json
+          keys = json.load(open("/tmp/herdr-home/keys.json"))
+          section = keys.get("layout:workspace", {})
+          assert section.get("alt-f") == "mod.open:search", section
+          print("keys merged:", len(section), "bindings")
+          PY

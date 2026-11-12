@@ -1,0 +1,10 @@
+{
+  "zoom": 1,
+  "sounds": {
+    "enabled": true
+  },
+  "font_size": 16,
+  "font_ligatures": false,
+  "ui_font": "Geist",
+  "minimum_contrast": 1
+}

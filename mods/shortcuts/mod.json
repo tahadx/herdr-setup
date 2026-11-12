@@ -1,0 +1,9 @@
+{
+  "place": "none",
+  "title": "Keys",
+  "overlay": {
+    "kind": "dialog",
+    "width": 660,
+    "height": 580
+  }
+}
