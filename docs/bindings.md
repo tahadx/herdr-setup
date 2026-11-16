@@ -69,7 +69,7 @@ themselves, only while they hold the keyboard, so they never shadow a terminal.
 
 | Key | Action |
 | --- | --- |
-| `ctrl-j` / `ctrl-k` | Move to the pane below or above — or walk the find sheet or the sidebar while it has the keyboard |
+| `ctrl-j` / `ctrl-k` | Move to the pane below or above — or walk the find palette or the sidebar while it has the keyboard |
 | `ctrl-shift-b` | Collapse the sidebar to the rail, or expand it again |
 | `ctrl-shift-m` | Move the sidebar to the other side |
 | `ctrl-shift-d` | Make a worktree in the active space's repo |
@@ -116,7 +116,7 @@ themselves, only while they hold the keyboard, so they never shadow a terminal.
 | `f` | Fold or unfold the row |
 | `escape` | Leave: the keyboard goes back to the pane |
 
-## The find sheet
+## The find palette
 
 | Key | Action |
 | --- | --- |

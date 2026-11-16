@@ -29,7 +29,7 @@ const docs = read("docs/bindings.md");
 
 // The page in sections, so the keys that come from keys.json and the keys a panel
 // reads itself can be checked apart.
-const CONTEXT = new Set(["The sidebar, with its keyboard", "The find sheet", "Dialogs and popups"]);
+const CONTEXT = new Set(["The sidebar, with its keyboard", "The find palette", "Dialogs and popups"]);
 const sections = [];
 for (const line of docs.split("\n")) {
   if (line.startsWith("## ")) sections.push({ heading: line.slice(3).trim(), lines: [] });

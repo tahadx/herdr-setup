@@ -1,23 +1,27 @@
 # Herdr Workspace
 
-A keyboard-driven [Herdr](https://herdr.dev) layout: every agent and terminal in
-one sidebar, one find sheet over everything, and no tab bar.
+A [Herdr](https://herdr.dev) layout driven entirely from the keyboard: every
+action has a key, from anywhere in the window. `Alt+F` opens the find palette:
+every space, worktree, agent and terminal in one tree, searched by name,
+branch, folder, title or state, and it acts too — go, pin, rename, reorder,
+close, make a space or a worktree. The sidebar is the upgraded one: pins that
+keep their slot, agents grouped by what they need, every terminal's program and
+status, worktrees and sub-agents nested, a thin accent scrollbar, and a compact
+rail when narrow. No tab bar, no title bar; panes are cards, and focus follows
+the pointer.
 
 ![Herdr Workspace](preview.png?v=3)
 
 ## What you get
 
-- **One sidebar, no tab bar.** `AGENTS` above `TERMINALS`, pinned places that
-  keep their slot, worktrees nested under their repo, and a rail of avatars when
-  the sidebar is narrow.
-- **One find sheet, `Alt+F`.** Spaces, worktrees and agents in one tree; typing
-  matches names, branches, folders, titles and states.
+- **Pins that hold their place.** `Ctrl+P` in the sidebar or the find palette; the
+  line stays where you put it, and opening the space again comes back to it.
 - **Worktrees from the sidebar.** New, open and remove in dialogs; the checkout
   is a space under its repo, and removing it closes that space.
-- **Panes as cards.** 10 px cards with an accent border on the focused pane, no
-  title bar, the footer drags the window, and focus follows the pointer.
-- **A bar of its own.** A thin accent scrollbar when a list overflows — no
-  track, a little wider under the pointer.
+- **A searchable keys sheet.** Every shortcut in one list, one row per command,
+  from the keyboard icon in the footer.
+- **A footer you can grab.** Machine on the left, keys and settings on the right;
+  the strip itself drags the window.
 
 ## Install
 
@@ -37,7 +41,7 @@ only the bindings your file is missing. `HERDR_APP_HOME` installs elsewhere.
 ## Keys
 
 `Ctrl+Shift+B` folds the sidebar to its rail, `Alt+B` puts the keyboard in it,
-`Alt+F` opens the find sheet. Every binding is in
+`Alt+F` opens the find palette. Every binding is in
 [docs/bindings.md](docs/bindings.md).
 
 ## Theme
