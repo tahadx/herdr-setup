@@ -1,13 +1,12 @@
 # Herdr Workspace
 
 A Herdr window with no tab bar, driven entirely from the keyboard: every action
-has a key, from anywhere. `Alt+F` opens the find palette: every space,
-worktree, agent and terminal in one tree, searched by name, branch, folder,
-title or state, and it acts — go, pin, rename, reorder, close, make a space,
-make a worktree. The sidebar keeps pins in their slot, groups agents by what
-they need, shows every terminal's program and status, nests worktrees and
-sub-agents, and folds to a compact rail when narrow. Panes are cards; focus
-follows the pointer.
+has a key. `Alt+F` is a find palette over every space, worktree, agent and
+terminal, searched by name, branch, folder, title or state, that also acts: go,
+pin, rename, reorder, close, new space, new worktree. The upgraded sidebar
+keeps pins in their slot, groups agents by what they need, shows each
+terminal's program and status, nests worktrees and sub-agents, and folds to a
+compact rail when narrow.
 
 ![Herdr Workspace](preview.png)
 
