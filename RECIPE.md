@@ -207,7 +207,7 @@ and offers to make one.
   click. The `hoverfocus` header stays transparent, so the pane looks the same;
   the sidebar's agent and terminal rows remain click-only.
 
-**Keys this layout adds** (see the install table in `README.md`)
+**Keys this layout adds** (see the table in `docs/bindings.md`)
 
 - `Alt+F` the search sheet; `Ctrl+Shift+X` closes the focused pane, `Ctrl+Shift+W`
   its tab — closing the last pane of a tab closes the tab, and closing the last
@@ -459,7 +459,7 @@ foreground `#c1c1c1`, selection `#333333`, accent/solid `#8a9a7b`).
 
 - `herdr-app do layout.switch --name workspace` shows the sidebar, the cards and
   the footer, with no tab bar and no title bar.
-- The keys from the README work: `Alt+F` opens the search sheet,
+- The keys from `docs/bindings.md` work: `Alt+F` opens the search sheet,
   `Ctrl+Shift+X` closes a pane, `Ctrl+Shift+W` a tab, `Ctrl+Shift+M` swaps the
   sidebar to the right and back, `Ctrl+Shift+D` opens a new-worktree dialog.
 - `Alt+F` then typing `herd` narrows the sheet to matching spaces and agents;
