@@ -52,8 +52,8 @@ the window, and a narrow sidebar folds into a rail of avatars and state marks.
 ## Install
 
 ```sh
-git clone https://github.com/tahadx/herdr-workspace.git
-cd herdr-workspace
+git clone https://github.com/tahadx/workspace.git
+cd workspace
 ./install.sh
 herdr-app do layout.switch --name workspace
 ```
@@ -191,7 +191,7 @@ breaks the panels. `RECIPE.md` lists them and everything else a rebuild needs.
 ## Publishing
 
 This is a layout bundle, listed at herdr.dev/layouts by its `herdr-layout` topic:
-[herdr.dev/layouts/tahadx/herdr-workspace](https://herdr.dev/layouts/tahadx/herdr-workspace).
+[herdr.dev/layouts/tahadx/workspace](https://herdr.dev/layouts/tahadx/workspace).
 `preview.png` is a screenshot; `layouts/workspace.svg` is the drawn thumbnail.
 To re-render it:
 
