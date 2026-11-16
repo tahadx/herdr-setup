@@ -32,6 +32,12 @@ window edge is its edge), not resizable by its edge — it collapses instead.
 - **The footer**, 32 px, `chrome` background with a hairline above: a 20 px
   monitor/server tile and the machine's name at `11.5 px` on the left, a keyboard
   and a gear on the right, 26 px each.
+- **A bar of its own.** When a list outgrows its box, a 3 px `accent` thumb sits
+  3 px in from the panel's edge — fully rounded, no track, 4 px while the
+  pointer is on the bar. The list scrolls inside the mod (`scroller` in
+  `sidebar.js`): the wheel moves an offset, the rows are drawn at it, and the
+  thumb is the mod's. Reaching a row from the keyboard sums each row's measured
+  height (`reveal`).
 
 **The work area**, `canvas` background, 8 px padding and 8 px gaps: the active
 tab as cards — 10 px radius, 1 px `border` (1 px `accent` while the pane has the
@@ -397,6 +403,12 @@ foreground `#c1c1c1`, selection `#333333`, accent/solid `#8a9a7b`).
   `mods/changes/changes.svg`. Those folders are Herdr's shipped mods and are not
   copied into this repository — they exist on any Herdr install, but a rebuild must
   not expect them in the bundle, and renaming a path here means drawing nothing.
+- **The bar is the mod's, not the app's.** `overflow_y_scrollbar` paints a
+  16 px, square, `foreground`-grey bar whose width, colours and radius are the
+  base theme's; no style a mod can set reaches it. `scroller` therefore owns the
+  offset: `overflow_y_scroll`, a translated content column, an `accent` thumb,
+  and one measured wrapper per row so `reveal` can put a row on screen. Do not
+  "simplify" it back to `overflow_y_scrollbar`.
 - **The layout must be a clone.** `layout.set` — the flip and the panel's width
   bookkeeping — refuses structural edits on a shipped layout, so this file is a
   clone of `main` and must stay one.
@@ -473,7 +485,10 @@ foreground `#c1c1c1`, selection `#333333`, accent/solid `#8a9a7b`).
   finds the search binding and `Esc` closes it.
 - `herdr-app check mods/<each>` passes for all nine mods, and `herdr-app status`
   reports no errors.
-- The ten test files pass: `node tests/*.test.mjs`. They cut functions out of
+- The sidebar overflows: a 3 px `accent` thumb runs down its right edge with no
+  track, the wheel moves the rows, pressing the track jumps, dragging the thumb
+  follows the pointer, and `Ctrl+J`/`K` keeps the selected row on screen.
+- The thirteen test files pass: `node tests/*.test.mjs`. They cut functions out of
   the mods and run them with stubs, so they fail when the code changes rather
   than when the test drifts.
 - Reorder: `Ctrl+Shift+K` three times on the last space moves it three places

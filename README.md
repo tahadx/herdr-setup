@@ -4,7 +4,7 @@ A keyboard-driven [Herdr](https://herdr.dev) layout: one sidebar with every agen
 and terminal, a search sheet, and no tab bar. Panes are cards, the footer drags
 the window, and a narrow sidebar folds into a rail of avatars and state marks.
 
-![Herdr Workspace](preview.png?v=2)
+![Herdr Workspace](preview.png?v=3)
 
 ## What you get
 
@@ -13,6 +13,10 @@ the window, and a narrow sidebar folds into a rail of avatars and state marks.
   (Needs you → Done → Working → Idle); the sort button also offers *Grouped by
   space* and *Spaces with agents*. Terminals show their program's mark, tab and
   status. Pins, sub-agents and multiple machines are handled in place.
+- **A bar that belongs to the theme.** When a list outgrows its box, a 3 px
+  accent thumb runs down its right edge — fully rounded, no track, 4 px while
+  the pointer is on it. The wheel, a press on the bar and dragging it all work;
+  the keyboard keeps its row on screen.
 - **One search sheet, `Alt+F`.** Pinned places, spaces, worktrees and agents in
   one tree. Typing matches names, branches, folders, titles and states at once —
   `web hotfix` finds a space and its worktree, `needs you` finds what is waiting.
@@ -186,7 +190,8 @@ breaks the panels. `RECIPE.md` lists them and everything else a rebuild needs.
 
 ## Publishing
 
-This is a layout bundle, listed at herdr.dev/layouts by its `herdr-layout` topic.
+This is a layout bundle, listed at herdr.dev/layouts by its `herdr-layout` topic:
+[herdr.dev/layouts/tahadx/herdr-workspace](https://herdr.dev/layouts/tahadx/herdr-workspace).
 `preview.png` is a screenshot; `layouts/workspace.svg` is the drawn thumbnail.
 To re-render it:
 
