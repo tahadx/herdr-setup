@@ -1,10 +1,10 @@
-# Herdr Setup
+# Herdr Workspace
 
 A keyboard-driven [Herdr](https://herdr.dev) layout: one sidebar with every agent
 and terminal, a search sheet, and no tab bar. Panes are cards, the footer drags
 the window, and a narrow sidebar folds into a rail of avatars and state marks.
 
-![Herdr Setup](preview.png?v=2)
+![Herdr Workspace](preview.png?v=2)
 
 ## What you get
 
@@ -48,8 +48,8 @@ the window, and a narrow sidebar folds into a rail of avatars and state marks.
 ## Install
 
 ```sh
-git clone https://github.com/tahadx/herdr-setup.git
-cd herdr-setup
+git clone https://github.com/tahadx/herdr-workspace.git
+cd herdr-workspace
 ./install.sh
 herdr-app do layout.switch --name workspace
 ```

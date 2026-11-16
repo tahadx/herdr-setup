@@ -1,10 +1,10 @@
-# Herdr Setup
+# Herdr Workspace
 
 A Herdr window with no tab bar and no top bar: one 223 px sidebar holding every
 agent and every terminal of the space you are in, a footer you can drag the
 window by, panes drawn as cards, and a single search sheet over it all.
 
-![Herdr Setup](preview.png)
+![Herdr Workspace](preview.png)
 
 ## What you see
 
