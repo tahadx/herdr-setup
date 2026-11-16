@@ -1,4 +1,4 @@
-# Herdr Workspace
+# Workspace
 
 A Herdr window with no tab bar, driven entirely from the keyboard. Alt+F is the
 search sheet: pinned places, spaces, worktrees and agents in one tree, matched
@@ -8,7 +8,7 @@ its line and slot. An upgraded sidebar groups agents by what they need, shows
 terminals with their program and status, and below 160 px folds to a 44 px rail
 of avatars and state marks.
 
-![Herdr Workspace](preview.png)
+![Workspace](preview.png)
 
 ## What you see
 
