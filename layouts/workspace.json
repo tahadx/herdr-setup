@@ -148,6 +148,9 @@
     14,
     12
   ],
+  "font": "JetBrains Mono",
+  "font_size": 16,
+  "ui_font": "Geist",
   "titlebar": "none",
   "traffic_lights": [
     12,

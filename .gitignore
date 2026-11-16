@@ -73,3 +73,7 @@ themes/win98.json
 # themes/omarchy.json is tracked: it is the palette this layout is drawn for.
 # Omarchy's omarchy-theme-set-herdr-app rewrites it from the current Omarchy
 # theme, so a theme switch shows up here as a diff.
+
+# The live app's own settings: the layout now names the fonts the look is
+# drawn in, so this file is machine state, not part of the bundle.
+settings.json
