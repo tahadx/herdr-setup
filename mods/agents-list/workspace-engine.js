@@ -1321,11 +1321,18 @@ export class Workspace extends View {
     if (r.kind === "space") {
       this.openSpace(r.s);
     } else if (r.kind === "pin") {
-      // A pin is a place, not a licence for a second space in that place: go to
-      // the space already there, and say why nothing new was opened.
       const p = r.pin;
-      const existing = spaceAt(p.folder, p.machine ?? null);
-      if (existing) {
+      // The pin's own space first, by id. A pin keeps the space it was pinned
+      // from: its shell may `cd` out of the folder, and the folder may hold no
+      // space of its own, but the row still means that space. Looking the
+      // folder up instead found another space — or none, and opened a duplicate
+      // in a place that already had one.
+      const own = p.id ? spaces().find((x) => x.id === p.id) : null;
+      // A place with no space of its own: another space standing in that folder
+      // is that place. Go to it rather than open a second one, and say so.
+      const existing = own ? null : spaceAt(p.folder, p.machine ?? null);
+      if (own) this.openSpace(own);
+      else if (existing) {
         this.openSpace(existing);
         notify({
           title: "That folder already has a space",
