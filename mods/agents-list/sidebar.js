@@ -882,19 +882,25 @@ export class Sidebar extends Workspace {
     const same = (a) => a.toLowerCase() === name.toLowerCase();
     const branch = same(raw) || raw === "master" || raw === "main" ? "" : raw;
     const repo = tree || same(g.name) ? "" : g.name;
-    // Three slots on the right, each its own width, so a branch coming and going
-    // never moves the counts, and the counts line up down the list.
-    const count = (n, glyph, tone) => div().w(24).flex_none().text_right().text_size(10)
+    // The counts keep a width of their own, so a branch coming and going never
+    // moves them and they line up down the list.
+    const count = (n, glyph, tone) => div().w(20).flex_none().text_right().text_size(9.5)
       .font_medium().text_color(tone).child(`${glyph}${n}`);
+    // One tail, as the app's own spaces list draws it: "herdr \u00b7 spike \u21912 \u21931".
+    // It grows from its text's width (`flex_auto`, not `flex_1`, whose zero basis
+    // made the tail a zero-width box that painted its contents over the name) and
+    // keeps a floor, so the name and the tail give way in proportion instead of one
+    // of them disappearing. A boxed per-word chip could not: at 223 px the chip and
+    // the name cannot both fit beside the counts, the fold and the pin.
+    const where = [repo, branch].filter(Boolean).join(" \u00b7 ");
     return h_flex()
-      .flex_1()
-      .min_w(0)
-      .gap(5)
+      .flex_auto()
+      .min_w(where ? 48 : 0)
+      .gap(4)
       .justify_end()
       .items_center()
-      .when(Boolean(repo), (el) => el.child(div().min_w(0).truncate().text_size(10.5).text_color(t.dim).child(repo)))
-      .when(Boolean(branch), (el) => el.child(div().flex_none().max_w(104).truncate().px(5).h(16).rounded(4)
-        .bg(wash(t.foreground, "07")).text_size(9.5).text_color(t.dim).flex().items_center().child(branch)))
+      .when(Boolean(where), (el) => el.child(div().min_w(0).truncate().text_size(9.5)
+        .text_color(t.dim).child(where)))
       .when(g.ahead > 0, (el) => el.child(count(g.ahead, "\u2191", t.ansi2)))
       .when(g.behind > 0, (el) => el.child(count(g.behind, "\u2193", t.ansi1)));
   }
@@ -2671,7 +2677,7 @@ export class Sidebar extends Workspace {
           .pr(3)
           .h(tree ? 28 : 30)
           .flex_none()
-          .gap(7)
+          .gap(6)
           .items_center()
           .rounded(7)
           .overflow_hidden()
@@ -2778,10 +2784,10 @@ export class Sidebar extends Workspace {
               .bg(s.status === "working" ? t.accent : (t[s.status] ?? t.dim))
               .border(1).border_color(t.chrome)
               .tooltip(s.status === "blocked" ? "Needs you" : s.status === "done" ? "Done" : "Working")))))
-          .child(div().flex_shrink(1).min_w(30).max_w(150).truncate().text_size(12)
+          .child(div().flex_shrink(1).min_w(30).truncate().text_size(12)
             .when(s.active, (el) => el.font_medium())
             .text_color(s.active ? t.foreground : wash(t.foreground, "e6")).child(this.spaceName(s)))
-          .child(g ? this.gitTail(g, tree, s.name, t) : div().flex_1())
+          .when(Boolean(g), (el) => el.child(this.gitTail(g, tree, s.name, t)))
           .when(hidden > 0, (el) => el.child(countPill(t, hidden, topTone)))
           .child(div().size(18).flex_none().flex().items_center().justify_center()
             .when(kids.length > 0 || worktreesOf(s).length > 0 || checkoutsOf(s).length > 0, (el) => el.child(div()
@@ -2803,7 +2809,7 @@ export class Sidebar extends Workspace {
           // Showing it for whichever row the pointer crossed rebuilt the whole
           // sidebar on the way past. A pin belongs to a space: a worktree is a
           // checkout drawn under its repo, not a place of its own to keep.
-          .child(div().w(20).flex_none().flex().items_center().justify_center()
+          .child(div().w(18).flex_none().flex().items_center().justify_center()
             .when(!tree && !linked && (Boolean(pin) || hovered), (el) => el.child(div()
             .id(`spin-${s.id}`)
             .size(18)
