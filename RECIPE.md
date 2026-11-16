@@ -1,12 +1,12 @@
 # Herdr Workspace
 
-A Herdr window with no tab bar, driven entirely from the keyboard: every action
-has a key. `Alt+F` is a find palette over every space, worktree, agent and
-terminal, searched by name, branch, folder, title or state, that also acts: go,
-pin, rename, reorder, close, new space, new worktree. The upgraded sidebar
-keeps pins in their slot, groups agents by what they need, shows each
-terminal's program and status, nests worktrees and sub-agents, and folds to a
-compact rail when narrow.
+A Herdr window with no tab bar, driven entirely from the keyboard. Alt+F is the
+search sheet: pinned places, spaces, worktrees and agents in one tree, matched
+on name, branch, folder, title or state, and acting there — switch, pin,
+rename, reorder, close, new space, new worktree. Ctrl+P pins a place: it keeps
+its line and slot. An upgraded sidebar groups agents by what they need, shows
+terminals with their program and status, and below 160 px folds to a 44 px rail
+of avatars and state marks.
 
 ![Herdr Workspace](preview.png)
 
@@ -78,7 +78,7 @@ button switches between three views. *Priority* and *Grouped by space* are the
 app's own list, unchanged: small program icons, rows that read "space · detail",
 a quiet group heading with a count, a paragraph when nothing has reported. Only
 the third is this mod's drawing.
-*Spaces with agents*: the find palette's tree, always on screen — a section per
+*Spaces with agents*: the search sheet's tree, always on screen — a section per
 space urgency, every space listed (the ones no agent runs in too), a worktree
 space under its checkout, and its agents nested under it. The rows are drawn the
 way Herdr's own spaces list draws them: an 18 px avatar with the space's initial
@@ -133,7 +133,7 @@ only terminal in the space, a shell opens there first, and the dialog says so.
 A dialog opened from the sidebar hands the keyboard back to the list when it
 closes, so a removal never drops the person into the terminal behind it.
 
-The sidebar's keys are the find palette's own, so one map works in both places:
+The sidebar's keys are the search sheet's own, so one map works in both places:
 `Ctrl+J`/`Ctrl+K` walk the rows (Up/Down too), `Enter` goes there, `Ctrl+D`
 closes the space / stops the agent / removes the worktree, `Ctrl+P` pins,
 `Ctrl+R` renames, `Ctrl+A` starts a worktree of the row's repo, and
@@ -213,12 +213,12 @@ and offers to make one.
 
 **Keys this layout adds** (see the table in `docs/bindings.md`)
 
-- `Alt+F` the find palette; `Ctrl+Shift+X` closes the focused pane, `Ctrl+Shift+W`
+- `Alt+F` the search sheet; `Ctrl+Shift+X` closes the focused pane, `Ctrl+Shift+W`
   its tab — closing the last pane of a tab closes the tab, and closing the last
   tab of a space opens a fresh tab in that space first, so Herdr never jumps to
   another space's terminal.
 - `Ctrl+J` / `Ctrl+K` move focus down/up through panes (`pane.go`), or move the
-  highlight in the find palette while it is open.
+  highlight in the search sheet while it is open.
 - `Ctrl+Shift+M` flips the whole sidebar to the other side (the layout's two root
   children swap, and with them the panel and the terminal pane); `Ctrl+Shift+D`
   opens the new-worktree dialog for the space you are in.
@@ -226,7 +226,7 @@ and offers to make one.
   the sidebar. It stays mounted when the rail folds and the footer and the
   terminals list are put away.
 
-**The find palette** (720 × 560, opened by `Alt+F` or the sidebar's magnifier)
+**The search sheet** (720 × 560, opened by `Alt+F` or the sidebar's magnifier)
 
 - Pinned places first, in the order the pins were made (a place whose space is
   gone keeps its line), then every space, with worktrees nested under their space
@@ -244,7 +244,7 @@ and offers to make one.
   pin → open a space there, or go to the space already there).
 - **`Ctrl+J`/`Ctrl+K` are shared with pane movement, and separated by the panel.**
   `keys.json` (under `layout:workspace`) binds them to `agents-list.dir_down`/`dir_up`,
-  which moves pane focus when no panel is open, hands them to the find palette when
+  which moves pane focus when no panel is open, hands them to the search sheet when
   it is (`shared("search.open")` → `shared("search.move")`), and to the sidebar
   when its keyboard is there (`shared("sidebar.kb")` → `shared("sidebar.move")`).
   Both panels poll every 70 ms. Each also handles `ctrl+j`/`ctrl+k` itself in case
@@ -284,10 +284,10 @@ and offers to make one.
   label, the full text and all keys in a tooltip.
 - Worktrees are Herdr's own (`<home>/.herdr/worktrees/<repo>/<branch>`): a dialog
   asks for the branch and makes or opens one, and removing one takes its pins out
-  of the find palette.
+  of the search sheet.
 - A space whose folder is gone is named `… (deleted)` by Herdr; after six seconds
   the footer closes that space and drops its pin, so a deleted checkout cannot
-  come back from the find palette.
+  come back from the search sheet.
 
 ## Built from
 
@@ -319,7 +319,7 @@ Mods, all `"place": "none"` (the layout decides where they draw):
 
 | Mod | Props | What it does |
 |---|---|---|
-| `agents-list` | `{sidebar:true}`; no props: the `Alt+F` palette; `{menu}` / `{sortMenu}`: its popups | The sidebar and the find palette, one mod. `workspace-engine.js` is the logic both use (spaces, pins, removals, worktrees, order, row actions); `sidebar.js` and `palette.js` are the two drawings. `agents()`, `setAgentOrder`, `terminal.pin`, `agent.focus`, `keys()`; agent state in `localStorage` (`changed`) and the sort in shared `agents.sort`. |
+| `agents-list` | `{sidebar:true}`; no props: the `Alt+F` palette; `{menu}` / `{sortMenu}`: its popups | The sidebar and the search sheet, one mod. `workspace-engine.js` is the logic both use (spaces, pins, removals, worktrees, order, row actions); `sidebar.js` and `palette.js` are the two drawings. `agents()`, `setAgentOrder`, `terminal.pin`, `agent.focus`, `keys()`; agent state in `localStorage` (`changed`) and the sort in shared `agents.sort`. |
 | `terminals-list` | — | The TERMINALS list. `panes()`, `spaces()`, `focused()`, `tab.select`, `pane.focus`, `tab.new`, `tab.close`, `pane.close`, `layout.show/hide/select`; panel choice per space in `localStorage` (`panels`). |
 | `footer` | — | The footer and the sidebar menu trigger, plus the deleted-space sweep. It still answers `dir_down`/`dir_up`, `flip_layout` and `worktree_new` when a key is rebound onto it. `spaces()`, `layout()`, `layout.set`, `shared` `sidebar.width`, `sidebar.collapsed`, `spaces.pinned`, `search.open`, `search.move`. |
 | `icons` | — | Icons every other mod loads (`mods/icons/*.svg`), plus a top bar used by other layouts: space chip (`git worktree list --porcelain` for the repo's name), search, settings, sidebar toggle, window buttons where the OS draws none. |
@@ -463,7 +463,7 @@ foreground `#c1c1c1`, selection `#333333`, accent/solid `#8a9a7b`).
 
 - `herdr-app do layout.switch --name workspace` shows the sidebar, the cards and
   the footer, with no tab bar and no title bar.
-- The keys from `docs/bindings.md` work: `Alt+F` opens the find palette,
+- The keys from `docs/bindings.md` work: `Alt+F` opens the search sheet,
   `Ctrl+Shift+X` closes a pane, `Ctrl+Shift+W` a tab, `Ctrl+Shift+M` swaps the
   sidebar to the right and back, `Ctrl+Shift+D` opens a new-worktree dialog.
 - `Alt+F` then typing `herd` narrows the sheet to matching spaces and agents;
