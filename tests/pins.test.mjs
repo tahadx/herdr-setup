@@ -287,6 +287,12 @@ const check = (label, ok, extra = "") => {
     rows[0].s?.id === "a", JSON.stringify(rows));
 }
 
+// The two views paint a closed pin with the same face: the colour saved on the
+// pin. Hashing the folder in one view made the same place change colour.
+check("palette: a closed pin wears its saved colour",
+  /const tone = r\.color \?\? folderColor\(r\.folder\)/.test(read("mods/agents-list/palette.js"))
+  && /const tone = p\.color \?\? folderColor\(p\.folder\)/.test(read("mods/agents-list/sidebar.js")));
+
 // A pin names a repo, not just a space: the group key is what its checkouts hang
 // under while the space is gone.
 {

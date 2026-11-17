@@ -154,7 +154,8 @@ export class Palette extends Workspace {
         : (s.machine ?? null) === (p.machine ?? null) && norm(s.folder ?? "") === norm(p.folder)));
       if (live) continue;
       const sc = best([[p.name, 1], [pinLabel(p), 0.9], [base(p.folder), 0.8], ["pinned", 0.4]]);
-      if (sc > -Infinity) results.push({ kind: "pin", id: p.id ?? null, folder: p.folder, on: p.machine ?? null, name: pinLabel(p), named: Boolean(p.named), score: sc });
+      if (sc > -Infinity) results.push({ kind: "pin", id: p.id ?? null, folder: p.folder, machine: p.machine ?? null,
+        repo: p.repo ?? null, color: p.color ?? null, name: pinLabel(p), named: Boolean(p.named), score: sc });
     }
     const labelOf = (r) => r.kind === "space" ? this.spaceName(r.s) : r.kind === "pin" ? r.name : r.kind === "worktree" ? (r.c.branch ?? base(r.c.path)) : r.kind === "agent" ? (r.a.program?.name ?? r.a.title ?? r.a.address) : r.label;
     results.sort((a, b) => b.score - a.score || String(labelOf(a)).localeCompare(String(labelOf(b))));
@@ -218,6 +219,23 @@ export class Palette extends Workspace {
           const key = `w\u0000${keyOf(r)}`;
           if (!used.has(key)) { used.add(key); out.push(r); }
         }
+      } else if (r.kind === "pin") {
+        const key = `p\u0000${r.id ?? r.folder ?? ""}`;
+        if (!used.has(key)) { used.add(key); out.push(r); }
+        // A pin is the place: its worktrees come with it, the way the overview's
+        // Pinned section draws them. Searching "reel" found the pin row and the
+        // checkout whose folder happened to carry the word, but not the other
+        // worktree of the repo.
+        const pin = pinned.find((p) => (r.id ? p.id === r.id
+          : (p.machine ?? null) === (r.machine ?? null) && norm(p.folder ?? "") === norm(r.folder ?? ""))) ?? r;
+        const place = this.pinChildren(pin, listed, trees, ps);
+        for (const w of place.spaces) if (!used.has(w.id)) tree(w, 1);
+        for (const w of place.trees) {
+          const k = `w\u0000${keyOf(w)}`;
+          if (used.has(k)) continue;
+          used.add(k);
+          out.push({ kind: "worktree", c: w.c, repo: w.repo, on: w.on, depth: 1 });
+        }
       } else out.push(r);
     }
     // Which rows are the hits, and which only came along with one.
@@ -257,6 +275,28 @@ export class Palette extends Workspace {
     const groupKey = groupKeyOf(parent, this.paneSnap);
     const list = trees.filter((w) => !w.c.main && this.checkoutParent?.get(`${w.on ?? ""}\u0000${w.c.path}`) === id);
     return orderedPaths(groupKey, list, (w) => w.c.path);
+  }
+
+  // What a pin's place holds even when its space is gone: the live worktree
+  // spaces of its repo that hang under no space, and the checkouts nobody has
+  // opened yet. The sidebar draws the same rows under a dead pin, so the sheet
+  // must not show fewer of the place's worktrees than the sidebar does.
+  pinChildren(p, all = this.liveSpaces(this.paneSnap), trees = this.liveTrees(), ps = this.paneSnap, skip = null) {
+    const repo = pinnedRepo(p, this.git);
+    if (!repo) return { spaces: [], trees: [] };
+    const parentOf = (s) => {
+      const id = this.parent?.get(s.id);
+      return id ? all.find((x) => x.id === id) ?? null : null;
+    };
+    const spacesNow = orderedPaths(repo, all.filter((w) => this.isWorktree(w) && !parentOf(w)
+      && (w.machine ?? null) === (p.machine ?? null)
+      && `${w.machine ?? ""}${SEP}${tidyPath(this.checkoutRecord(w, ps)?.main ?? "")}` === repo),
+      (w) => this.checkoutRecord(w, ps)?.worktreePath ?? this.checkoutRecord(w, ps)?.root ?? "");
+    const treesNow = orderedPaths(repo, trees.filter((w) => !w.c.main
+      && `${w.on ?? ""}${SEP}${tidyPath(w.repo?.main ?? "")}` === repo
+      && !this.checkoutParent?.has(`${w.on ?? ""}\u0000${w.c.path}`)
+      && !(skip?.(w) ?? false)), (w) => w.c.path);
+    return { spaces: spacesNow, trees: treesNow };
   }
 
   rows() {
@@ -323,19 +363,7 @@ export class Palette extends Workspace {
     // A pin whose space is gone still names a repo: its checkouts, and the
     // spaces standing in them, stay under the place row — the repo outlives the
     // space that named it.
-    const pinRepo = (p) => pinnedRepo(p, this.git);
-    const pinKids = (p) => {
-      const repo = pinRepo(p);
-      if (!repo) return { spaces: [], trees: [] };
-      const spacesNow = orderedPaths(repo, all.filter((w) => this.isWorktree(w) && !parentOf(w)
-        && (w.machine ?? null) === (p.machine ?? null)
-        && `${w.machine ?? ""}${SEP}${tidyPath(this.checkoutRecord(w, ps)?.main ?? "")}` === repo),
-        (w) => this.checkoutRecord(w, ps)?.worktreePath ?? this.checkoutRecord(w, ps)?.root ?? "");
-      const treesNow = orderedPaths(repo, this.liveTrees().filter((w) => !w.c.main
-        && `${w.on ?? ""}${SEP}${tidyPath(w.repo?.main ?? "")}` === repo
-        && !emitted.has(keyOf(w))), (w) => w.c.path);
-      return { spaces: spacesNow, trees: treesNow };
-    };
+    const pinKids = (p) => this.pinChildren(p, all, this.liveTrees(), ps, (w) => emitted.has(keyOf(w)));
     const pinStart = out.length;
     if (pinRowList.length) {
       // The count is pins, not top-level pin rows: a pinned worktree is drawn
@@ -344,7 +372,8 @@ export class Palette extends Workspace {
       head(`Pinned ${pinned.length}`);
       for (const { p, s } of pinRowList) {
         if (!s) {
-          out.push({ kind: "pin", id: p.id ?? null, folder: p.folder, on: p.machine ?? null, name: pinLabel(p), named: Boolean(p.named) });
+          out.push({ kind: "pin", id: p.id ?? null, folder: p.folder, on: p.machine ?? null, machine: p.machine ?? null,
+            repo: p.repo ?? null, color: p.color ?? null, name: pinLabel(p), named: Boolean(p.named) });
           const kids = pinKids(p);
           for (const w of kids.spaces) emit(w, 1);
           for (const w of kids.trees) {
@@ -855,17 +884,21 @@ export class Palette extends Workspace {
             .bg(wash(t.foreground, "0c")).text_size(9.5).text_color(wash(t.muted, "cc")).flex().items_center().child(branch)))
           .when(Boolean(s.machine), (el) => el.child(div().flex_none().max_w(90).truncate().text_size(9.5).text_color(wash(t.muted, "cc")).child(s.machine)))
           .child(marker(Boolean(r.inPins) && !this.isWorktree(s) && Boolean(this.spacePin(s))
-            ? svg("mods/agents-list/pin.svg").size(12).flex_none().text_color(wash(t.accent, "8c"))
+            ? svg("mods/icons/pin.svg").size(12).flex_none().text_color(wash(t.accent, "8c"))
             : div()));
       }
       if (r.kind === "pin") {
-        const tone = folderColor(r.folder);
+        // The colour the place was pinned with, exactly as the sidebar draws it:
+        // hashing the folder alone made a closed pin change colour between the
+        // two views. A pin from an older build still falls back to the hash.
+        const tone = r.color ?? folderColor(r.folder);
+        const fill = String(tone).startsWith("#") ? tone : (MARK[tone] ?? t[tone] ?? t.dim);
         return h_flex().id(`pal-pin-${r.folder}`).relative().mx(4).pl(10).pr(10).h(36).rounded(9).gap(9).items_center()
           .when(on, (el) => el.bg(wash(t.accent, "16")))
           .when(!on, (el) => el.hover((x) => x.bg(wash(t.foreground, "0b"))))
           .on_click(() => this.openRow(this.paletteRow(r)))
           .when(on, (el) => el.child(div().absolute().left(0).top(8).bottom(8).w(2).rounded(1).bg(t.accent)))
-          .child(h_flex().size(20).flex_none().rounded(6).bg(MARK[tone] ?? t[tone]).items_center().justify_center()
+          .child(h_flex().size(20).flex_none().rounded(6).bg(fill).items_center().justify_center()
             .border(1).border_color(wash(t.foreground, "14"))
             .text_size(10.5).font_bold().text_color("#ffffff")
             .child([...r.name][0]?.toUpperCase() ?? "?"))
@@ -873,7 +906,7 @@ export class Palette extends Workspace {
           // No folder: where a shell starts is Herdr's bookkeeping, and a pin is
           // read by its name. Only another machine is worth saying out loud.
           .when(Boolean(r.on), (el) => el.child(div().flex_none().max_w(90).truncate().text_size(9.5).text_color(wash(t.muted, "cc")).child(r.on)))
-          .child(svg("mods/agents-list/pin.svg").size(12).flex_none().text_color(t.accent));
+          .child(svg("mods/icons/pin.svg").size(12).flex_none().text_color(t.accent));
       }
       if (r.kind === "worktree") {
         const c = r.c;
