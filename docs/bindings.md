@@ -74,7 +74,7 @@ themselves, only while they hold the keyboard, so they never shadow a terminal.
 | `ctrl-shift-m` | Move the sidebar to the other side |
 | `ctrl-shift-d` | Make a worktree in the active space's repo |
 | `alt-b` | Put the keyboard in the sidebar, and back |
-| `alt-shift-n` | Make a space |
+| `alt-shift-n` / `ctrl-shift-n` | Make a space (from a worktree: the repo's main checkout) |
 | `alt-shift-q` | Close the active space |
 | `alt-w` | Make a worktree |
 | `alt-shift-w` | Open one of the repo's worktrees |
@@ -248,6 +248,7 @@ your other sections and merges this layout's. The three sections are `global`,
     "ctrl-shift-b": "agents-list.toggle_sidebar",
     "alt-b": "agents-list.focus_sidebar",
     "alt-shift-n": "agents-list.new_space",
+    "ctrl-shift-n": "agents-list.new_space",
     "alt-shift-q": "agents-list.close_space",
     "alt-w": "agents-list.worktree_new",
     "alt-shift-w": "agents-list.worktree_open",

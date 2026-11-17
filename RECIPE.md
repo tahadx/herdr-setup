@@ -104,6 +104,14 @@ not, in the sidebar and in the sheet), and neither the worktree's space menu nor
 the sheet's `Ctrl+P` offers to pin one — a pin keeps a place, and a checkout is
 not a place of its own.
 
+**A new space is a place, never a checkout.** Made while the focused terminal is
+in a worktree, it starts in the repo's main checkout — and goes to the space
+already open there when one is — because a space inside the checkout would be
+drawn as another worktree row instead of a place. A shell that has `cd`'d out of
+the worktree keeps Herdr's own default, the folder it is in now. The sidebar's
+`+`, its "New space" row, `N`, `Alt+Shift+N` and the layout's `Ctrl+Shift+N` all
+take this rule.
+
 **A pinned space is never closed, and nothing else is protected with it.** The pin
 is the promise: the sidebar's two-second sweep skips a pinned space even when its
 folder is gone (it stays in the list, named `(deleted)`, with one toast), the space

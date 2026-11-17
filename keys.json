@@ -101,6 +101,7 @@
     "ctrl-shift-b": "agents-list.toggle_sidebar",
     "alt-b": "agents-list.focus_sidebar",
     "alt-shift-n": "agents-list.new_space",
+    "ctrl-shift-n": "agents-list.new_space",
     "alt-shift-q": "agents-list.close_space",
     "alt-w": "agents-list.worktree_new",
     "alt-shift-w": "agents-list.worktree_open",

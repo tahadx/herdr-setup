@@ -111,6 +111,40 @@ check("a checkout that already has a space is not listed a second time",
     !drawn.includes(tree) && drawn.includes(other), JSON.stringify(drawn));
 }
 
+// A new space made while the focused place is a worktree belongs to the repo's
+// main checkout, never inside the checkout: a space there is another worktree
+// row, not a place. An existing main place is gone to instead of a second one.
+{
+  const at = core.indexOf("  newSpace() {");
+  const end = core.indexOf("\n  }", at) + 4;
+  const build = (folder, all) => {
+    const calls = [];
+    const fn = new Function("newSpaceFolder", "spaces", "spaceRecord", "norm", "place", "panes", "run",
+      `${core.slice(at, end).replace("  newSpace() {", "function newSpace() {")}; return newSpace;`)(
+      () => folder, () => all, (s) => s.record ?? null, norm,
+      (s) => s.live ?? s.folder, () => [], (name, args) => calls.push([name, args]));
+    const self = { paneSnap: [], openSpace: (s) => calls.push(["openSpace", s.id]) };
+    return { made: fn.call(self), calls };
+  };
+  const wt = { id: "w", name: "typing", folder: "/wt", machine: null, record: { isWorktree: true } };
+  const place = { id: "p", name: "reel", folder: "/repo", machine: null, record: { isWorktree: false } };
+  let go = build({ folder: "/repo", machine: null }, [wt, place]);
+  check("new space in a worktree goes to the repo's main place",
+    go.made === false && go.calls[0]?.[0] === "openSpace" && go.calls[0]?.[1] === "p",
+    JSON.stringify(go.calls));
+  go = build({ folder: "/repo", machine: null }, [wt]);
+  check("new space in a worktree starts the main place when none is open",
+    go.made === true && go.calls[0]?.[0] === "space.new"
+      && go.calls[0]?.[1]?.folder === "/repo", JSON.stringify(go.calls));
+  go = build(null, [wt]);
+  check("new space anywhere else keeps Herdr's default",
+    go.made === true && go.calls[0]?.[0] === "space.new" && go.calls[0]?.[1] === undefined,
+    JSON.stringify(go.calls));
+  check("the sidebar's New space uses the shared place rule",
+    /if \(c === "new_space"\) \{ if \(this\.newSpace\(\)/.test(sidebar)
+    && /"New space", \(\) => this\.newSpace\(\)/.test(sidebar));
+}
+
 // A shell that wandered off still finds the space standing in its checkout.
 const { openSpaceFor } = factory(norm, base, shared, (s) => (s.live ?? s.folder), () => null);
 check("opening a checkout goes to the space standing there, even after a cd",

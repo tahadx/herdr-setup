@@ -185,5 +185,28 @@ const key = (main) => `\u001f${main}`;
     /this\.watchWalk\(cx, true, "search\.move"\);/.test(palette));
 }
 
+// ---- a new space from a worktree is the repo's place -----------------------
+{
+  const inside = new Function("norm", `${constant("inside")}; return inside;`)(norm);
+  const newSpaceFolder = new Function("spaceRecord", "place", "inside", "norm",
+    `${lift("newSpaceFolder")}; return newSpaceFolder;`)(
+    (s) => s.record ?? null,
+    (s, ps) => (ps ?? []).find((p) => p.focused)?.cwd ?? s.live ?? s.folder,
+    inside, norm);
+  const wt = "/home/me/worktrees/reel/typing";
+  const active = { id: "w", name: "typing", active: true, machine: null, folder: wt,
+    record: { isWorktree: true, main: "/home/me/repo", worktreePath: wt, root: wt } };
+  const at = (cwd) => [{ focused: true, cwd }];
+  check("a new space from a worktree starts at the repo's main checkout",
+    newSpaceFolder([active], at(`${wt}/src`))?.folder === "/home/me/repo",
+    JSON.stringify(newSpaceFolder([active], at(`${wt}/src`))));
+  check("a shell that cd'd out of the checkout keeps Herdr's default",
+    newSpaceFolder([active], at("/home/me/repo")) === null);
+  check("a plain space keeps Herdr's default",
+    newSpaceFolder([{ ...active, record: { isWorktree: false, main: "/home/me/repo" } }], at(wt)) === null);
+  check("no record yet leaves the default alone",
+    newSpaceFolder([{ ...active, record: null }], at(wt)) === null);
+}
+
 console.log(failures ? `\n${failures} engine check(s) failed` : "all engine checks passed");
 process.exit(failures ? 1 : 0);
