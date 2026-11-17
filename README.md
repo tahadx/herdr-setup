@@ -28,9 +28,9 @@ stops the agent or removes the checkout. `Esc` or `Alt+F` closes the sheet.
 place keeps its line above the spaces: no dialog closes it, a shell exiting
 leaves the row with its checkouts under it, and opening it again comes back to
 the same slot. A pin opens its own space by id and falls back to its folder
-only when that space is gone; the row names the place, never a folder the
+only when that space is gone; a pinned row names the place, never a folder the
 program inside happens to report, and a new space started from it opens there.
-`Ctrl+P` again unpins it.
+Every other unnamed row is the path it is in. `Ctrl+P` again unpins it.
 
 ## The sidebar
 

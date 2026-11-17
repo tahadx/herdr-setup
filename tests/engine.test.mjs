@@ -188,13 +188,11 @@ const key = (main) => `\u001f${main}`;
 // ---- a new space from a worktree is the repo's place -----------------------
 {
   const inside = new Function("norm", `${constant("inside")}; return inside;`)(norm);
-  let pinned = [];
-  const api = { git: {} };
-  const newSpaceFolder = new Function("spaceRecord", "place", "inside", "norm", "pinnedList", "workspace", "SEP", "tidyPath",
+  const newSpaceFolder = new Function("spaceRecord", "place", "inside", "norm",
     `${lift("newSpaceFolder")}; return newSpaceFolder;`)(
     (s) => s.record ?? null,
     (s, ps) => (ps ?? []).find((p) => p.focused)?.cwd ?? s.live ?? s.folder,
-    inside, norm, () => pinned, api, "\u001f", tidyPath);
+    inside, norm);
   const wt = "/home/me/worktrees/reel/typing";
   const active = { id: "w", name: "typing", active: true, machine: null, folder: wt,
     record: { isWorktree: true, main: "/home/me/repo", worktreePath: wt, root: wt } };
@@ -208,18 +206,6 @@ const key = (main) => `\u001f${main}`;
     newSpaceFolder([{ ...active, record: { isWorktree: false, main: "/home/me/repo" } }], at(wt)) === null);
   check("no record yet leaves the default alone",
     newSpaceFolder([{ ...active, record: null }], at(wt)) === null);
-  // A pinned place is where its new space belongs even when the program in the
-  // pane reports a folder outside it (the reel pin's opencode says `~`).
-  pinned = [{ id: "p", folder: "/home/me/reel", machine: null }];
-  const pinnedSpace = { id: "p", name: "reel", active: true, machine: null, folder: "/home/me/reel", record: null };
-  check("a pinned space reports its pin's folder when the pane wandered",
-    newSpaceFolder([pinnedSpace], at("/home/me"))?.folder === "/home/me/reel",
-    JSON.stringify(newSpaceFolder([pinnedSpace], at("/home/me"))));
-  check("a pinned space whose pane is still in the pin keeps the default",
-    newSpaceFolder([pinnedSpace], at("/home/me/reel/src")) === null);
-  api.git[`\u001f/work/other`] = { repo: `\u001f/work/other` };
-  check("a pinned space that cd'd into another repo keeps the default",
-    newSpaceFolder([pinnedSpace], at("/work/other")) === null);
 }
 
 console.log(failures ? `\n${failures} engine check(s) failed` : "all engine checks passed");

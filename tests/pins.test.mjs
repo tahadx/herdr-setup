@@ -367,16 +367,16 @@ check("palette: a closed pin wears its saved colour",
   const link = { repo: `${SEP}/home/me/reel`, root: "/home/me/worktrees/reel/x", branch: "x", linked: true };
   const s = { machine: null, folder: "/home/me/reel" };
   let read = spaceRead({ ...s, cwd: "/home/me" }, { [`${SEP}/home/me`]: null, [`${SEP}/home/me/reel`]: reel }, []);
-  check("space read: a live place outside the repo falls back to the space's folder",
-    read?.key === reel.repo, JSON.stringify(read));
-  read = spaceRead({ ...s, cwd: "/work/other" }, { [`${SEP}/work/other`]: other, [`${SEP}/home/me/reel`]: reel }, []);
-  check("space read: a live place in another repo wins over the folder",
-    read?.key === other.repo, JSON.stringify(read));
+  check("space read: a space at home has no repo tail, even when made in reel",
+    read === null, JSON.stringify(read));
   read = spaceRead({ ...s, cwd: "/home/me/reel" }, { [`${SEP}/home/me/reel`]: reel }, []);
   check("space read: a main checkout read answers with its repo",
     read?.key === reel.repo && read.linked === false, JSON.stringify(read));
-  read = spaceRead({ ...s, cwd: "/home/me/reel" }, { [`${SEP}/home/me/reel`]: link, [`${SEP}/home/me/reel/`]: reel }, []);
-  check("space read: a linked checkout read wins",
+  read = spaceRead({ ...s, cwd: "/work/other" }, { [`${SEP}/work/other`]: other, [`${SEP}/home/me/reel`]: reel }, []);
+  check("space read: the repo at the live place wins over the made folder",
+    read?.key === other.repo, JSON.stringify(read));
+  read = spaceRead({ ...s, cwd: "/home/me/reel" }, { [`${SEP}/home/me/reel`]: link }, []);
+  check("space read: a linked checkout read answers as linked",
     read?.key === reel.repo && read.linked === true, JSON.stringify(read));
 }
 

@@ -9,7 +9,7 @@ import {
   pinnedList, pinnedRepo, isPinned, checkouts, dropGitCache, worktreeTree, spaceColor, RANK, MARK,
   pinLabel, folderColor,
   onGitRefresh, takeGitAsk, touchWorkspace, listedCheckouts, pictureKey,
-  beginPaint, endPaint, frameCache, spaceRecord, pinSpace, persistWorkspace, spaceRead,
+  beginPaint, endPaint, frameCache, spaceRecord, pinSpace, persistWorkspace, spaceRead, inside,
   checkoutRecordOf, groupKeyOf, worktreeSiblings, movePathWithin, machineIndexOf,
   orderedPaths, orderedPlaces, SEP,
 } from "./workspace-engine.js";
@@ -740,13 +740,23 @@ export class Sidebar extends Workspace {
       changed = true;
     }
     for (const s of all) {
-      // The live place first, the folder the space was made in second. An agent
-      // that reports a folder outside the repo (opencode at `~`) must not erase
-      // the place the space stands in: without the fallback the reel space lost
-      // its repo record, and every worktree under reel lost its parent row.
+      // The live place, never the folder the space was made in: a space made in
+      // `reel` and used at `~` is at `~`, and must not wear reel's repo tail.
       const read = spaceRead(s, this.git, ps);
-      if (!read) continue;
-      if (pinSpace(s, read)) changed = true;
+      if (read) {
+        if (pinSpace(s, read)) changed = true;
+        continue;
+      }
+      // No repo where the space is now. A worktree keeps its checkout record
+      // (that is what it is, wherever the shell wanders); a main space that left
+      // its checkout for a folder with no repo is that folder now, so its old
+      // record goes and its row stops showing a tail for a place it is not in.
+      const rec = spaceRecord(s);
+      if (!rec || rec.isWorktree || !rec.root) continue;
+      const at = place(s, ps) ?? s.folder;
+      if (at && inside(norm(at), norm(rec.root))) continue;
+      delete this.spacePins[s.id];
+      changed = true;
     }
     if (changed) {
       touchWorkspace();

@@ -126,7 +126,7 @@ check("the sidebar names a row through the shared rule",
   && /const placeName = \(s, sect\) =>/.test(sidebar));
 check("the sheet names a row through the shared rule",
   /const shown = pin && !pin\.named && !s\.named \? pinLabel\(pin\) : this\.spaceName\(s\);/.test(palette)
-  && /this\.label\(shown/.test(palette) && /\.child\(\[\.\.\.this\.spaceName\(s\)\]/.test(palette));
+  && /this\.label\(shown/.test(palette) && /this\.avatar\(t, s, Boolean\(r\.inPins\), shown\)/.test(palette));
 check("the sidebar answers with the checkout's branch",
   /worktreeName\(s\) \{[\s\S]{0,260}return c\?\.branch/.test(sidebar));
 check("the sheet answers with the checkout's branch",
@@ -188,6 +188,10 @@ check("a stale sheet read cannot overwrite a newer one",
   check("new space in a worktree goes to the repo's main place",
     go.made === false && go.calls[0]?.[0] === "openSpace" && go.calls[0]?.[1] === "p",
     JSON.stringify(go.calls));
+  go = build({ folder: "/repo", machine: null }, [wt, { ...place, live: "/home/me" }]);
+  check("a space made in the main checkout but working elsewhere is not that place",
+    go.made === true && go.calls[0]?.[0] === "space.new"
+      && go.calls[0]?.[1]?.folder === "/repo", JSON.stringify(go.calls));
   go = build({ folder: "/repo", machine: null }, [wt]);
   check("new space in a worktree starts the main place when none is open",
     go.made === true && go.calls[0]?.[0] === "space.new"
@@ -200,6 +204,12 @@ check("a stale sheet read cannot overwrite a newer one",
     /if \(c === "new_space"\) \{ if \(this\.newSpace\(\)/.test(sidebar)
     && /"New space", \(\) => this\.newSpace\(\)/.test(sidebar));
 }
+
+// A main space that leaves its repo for a folder with no repo is that folder
+// now: its old record goes, so its row cannot keep another place's tail. A
+// worktree keeps its record, because the checkout is what the space is.
+check("a main space that leaves its repo drops the record it is not in",
+  /if \(!rec \|\| rec\.isWorktree \|\| !rec\.root\) continue;[\s\S]{0,220}delete this\.spacePins\[s\.id\]/.test(sidebar));
 
 console.log(failures ? `\n${failures} worktree check(s) failed` : "all worktree checks passed");
 process.exit(failures ? 1 : 0);

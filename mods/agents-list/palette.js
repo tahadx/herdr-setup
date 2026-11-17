@@ -669,14 +669,14 @@ export class Palette extends Workspace {
 
   // The tile, and — where the section does not already say it — the space's state
   // as a bead on its corner, the way a status sits on a portrait.
-  avatar(t, s, badged = false) {
+  avatar(t, s, badged = false, label = this.spaceName(s)) {
     const color = spaceColor(t, s);
     const bead = badged && s.status && s.status !== "idle"
       ? (s.status === "working" ? t.accent : (t[s.status] ?? t.dim)) : null;
     return h_flex().size(20).flex_none().rounded(6).bg(color).relative().items_center().justify_center()
       .border(1).border_color(wash(t.foreground, "14"))
       .text_size(10.5).font_bold().text_color("#ffffff")
-      .child([...this.spaceName(s)][0]?.toUpperCase() ?? "?")
+      .child([...label][0]?.toUpperCase() ?? "?")
       .when(Boolean(bead), (el) => el.child(div().absolute().right(-2).bottom(-2).size(6).rounded_full()
         .bg(bead).border(1).border_color(t.popover).flex_none()
         .tooltip(s.status === "blocked" ? "Needs you" : s.status === "done" ? "Done" : "Working")));
@@ -832,7 +832,7 @@ export class Palette extends Workspace {
         const branch = this.spaceGit(s, this.paneSnap)?.branch ?? s.branch;
         // A pin is a place: an unnamed pin reads its folder even when the program
         // in the space reports another folder (the reel pin read `~`). A space
-        // the person named keeps that name.
+        // the person named keeps that name; any other row is the path it is.
         const pin = r.inPins ? this.spacePin(s) : null;
         const shown = pin && !pin.named && !s.named ? pinLabel(pin) : this.spaceName(s);
         return h_flex().id(`pal-${r.inPins ? "pin-" : ""}${s.id}`).relative().mx(4).pl(10 + (r.depth ?? 0) * 16).pr(10).h(36).rounded(9).gap(9).items_center()
@@ -879,7 +879,7 @@ export class Palette extends Workspace {
           .when(on, (el) => el.child(div().absolute().left(0).top(8).bottom(8).w(2).rounded(1).bg(t.accent)))
           .when(Boolean(r.depth), (el) => el.child(div().w(10).flex_none().text_size(10.5).text_color(wash(t.muted, "cc")).child("↳")))
           // A worktree space reads as a branch, not as a space of its own.
-          .when(!this.isWorktree(s), (el) => el.child(this.avatar(t, s, Boolean(r.inPins))
+          .when(!this.isWorktree(s), (el) => el.child(this.avatar(t, s, Boolean(r.inPins), shown)
             .when(s.active, (a) => a.border_color(wash(t.accent, "b0")))))
           .when(this.isWorktree(s), (el) => el.child(svg("mods/workspace-chrome/branch.svg").size(13).flex_none().text_color(t.muted)))
           .child(this.label(shown, t, 12.5, s.active ? t.foreground : t.muted, s.active))

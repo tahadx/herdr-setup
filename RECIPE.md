@@ -106,12 +106,11 @@ not a place of its own.
 
 **A new space is a place, never a checkout.** Made while the focused terminal is
 in a worktree, it starts in the repo's main checkout — and goes to the space
-already open there when one is — because a space inside the checkout would be
-drawn as another worktree row instead of a place. A pinned space whose program
-reports a folder outside the pin (an agent at `~`) is the same case: its new
-space belongs to the pinned place. A shell that has `cd`'d out of the worktree
-keeps Herdr's own default, the folder it is in now. The sidebar's `+`, its "New
-space" row, `N`, `Alt+Shift+N` and the layout's `Ctrl+Shift+N` all take this rule.
+actually standing there when one is — because a space inside the checkout would
+be drawn as another worktree row instead of a place. A shell that has `cd`'d out
+of the worktree keeps Herdr's own default, the folder it is in now. The sidebar's
+`+`, its "New space" row, `N`, `Alt+Shift+N` and the layout's `Ctrl+Shift+N` all
+take this rule.
 
 **A pinned space is never closed, and nothing else is protected with it.** The pin
 is the promise: the sidebar's two-second sweep skips a pinned space even when its
@@ -444,10 +443,14 @@ foreground `#c1c1c1`, selection `#333333`, accent/solid `#8a9a7b`).
   (`pinLabel`: a named pin keeps its name, an unnamed one reads its folder). A
   pinned row draws the pin's place, not the program's report inside it: an agent
   at `~` must not turn the reel pin's row into `~`.
-- **A space's repo is read from its live place, then its own folder.** An agent
-  that reports a folder outside the repo (opencode at `~`) must not erase the repo
-  the space stands in; without the fallback the reel space lost its record, and
-  every worktree under reel lost its parent row.
+- **A space's repo is read from where it is, not where it was made.** A space
+  made in `reel` and used at `~` is at `~`: it has no repo tail and does not
+  claim reel's checkouts. A worktree's sticky record keeps its own repo across a
+  `cd`; a pin is what keeps a closed place's repo and checkouts.
+- **A pin is the exception.** A pinned row names its place (`pinLabel`) even when
+  the program inside reports another folder, because the row is the place, not
+  the shell. Any other unnamed row is the path it is in; a named space is its
+  name.
 - **A space stands where it works.** `spaceAt` matches only the live place, never
   the folder a space was made in: a space made in `reel` and used at `~` is at
   `~`, and handing it a `reel` pin moved the pin out of its place. The space's

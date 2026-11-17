@@ -267,18 +267,16 @@ export function spaceAt(folder, on, all = spaces(), ps = panes()) {
     && norm(place(s, ps) ?? "") === f) ?? null;
 }
 
-// The git read a space stands for: its live place first, then the folder it was
-// made in. The fallback matters when the program in the pane reports a folder
-// outside the repo (an agent starts its shell at `~`): the live place is not a
-// repository, but the space's own folder is, and dropping the read made the
-// reel space lose its repo — and its worktrees lose the place they hang under.
-// A linked read (a worktree) wins over a main-checkout read of the same space; a
-// read of a different repository at the live place wins over the folder.
+// The git read a space stands for: where it is now, never the folder it was
+// made in. A space made in `reel` and used at `~` is at `~`: giving it reel's
+// repo made its row read `~` beside a `reel`/`herdr-app` tail, two names for
+// one place, and claimed checkouts it was no longer standing in. A worktree's
+// sticky record keeps its own repo across a `cd`; the scan does not need to
+// re-read the made folder to keep it a checkout.
 export function spaceRead(s, git = workspace.git, ps = panes()) {
   if (!s) return null;
-  const places = [...new Set([place(s, ps), s.folder].filter(Boolean).map(tidyPath))];
-  const reads = places.map((f) => git?.[`${s.machine ?? ""}${SEP}${f}`]).filter((g) => g?.repo);
-  const g = reads.find((x) => x.linked) ?? reads[0];
+  const at = place(s, ps) ?? s.folder;
+  const g = git?.[`${s.machine ?? ""}${SEP}${tidyPath(at ?? "")}`];
   if (!g?.repo) return null;
   return {
     key: g.repo,
@@ -829,9 +827,7 @@ export function openSpaceFor(path, on, all = spaces(), ps = panes()) {
 // that checkout is drawn as another worktree row instead of a place. So the new
 // space starts in the repo's main checkout. A shell that has cd'd out of the
 // checkout keeps Herdr's own default — the folder it is in now — because that is
-// the place the person moved to. The same rule covers a pinned space whose pane
-// reports a folder outside the pin (an agent at `~`): the new space belongs to
-// the pinned place. Null means "leave the default".
+// the place the person moved to. Null means "leave the default".
 export function newSpaceFolder(all = spaces(), ps = panes()) {
   const active = (all ?? []).find((s) => s.active);
   if (!active) return null;
@@ -843,15 +839,6 @@ export function newSpaceFolder(all = spaces(), ps = panes()) {
     if (!root) return null;
     if (!at || !inside(norm(at), norm(root))) return null;
     return { folder: rec.main, machine: active.machine ?? null };
-  }
-  const pin = pinnedList().find((p) => p.id === active.id);
-  // Only when the pane is not in another repository: a shell that cd'd into a
-  // second repo has moved to a place of its own, and a new space there belongs
-  // to it. The fallback is for the program that reports `~` (or another
-  // non-repo folder) while the space still stands in the pinned place.
-  const liveRepo = at ? workspace.git?.[`${active.machine ?? ""}${SEP}${tidyPath(at)}`]?.repo : null;
-  if (pin?.folder && !liveRepo && (!at || !inside(norm(at), norm(pin.folder)))) {
-    return { folder: pin.folder, machine: pin.machine ?? null };
   }
   return null;
 }
@@ -1370,7 +1357,7 @@ export class Workspace extends View {
   }
 
   // New space: a place, never a second checkout of the same repo. From a
-  // worktree it belongs in the repo's main checkout; a space already standing
+  // worktree it belongs in the repo's main checkout; a space actually standing
   // there is gone to instead of opening a second one in that folder. Anywhere
   // else Herdr's own default — the focused terminal's folder — is already the
   // place the person is working. True means a space was made; false means an
@@ -1382,7 +1369,7 @@ export class Workspace extends View {
     if (!next) { run("space.new"); return true; }
     const at = all.find((s) => (s.machine ?? null) === (next.machine ?? null)
       && !spaceRecord(s)?.isWorktree
-      && (norm(place(s, ps) ?? "") === norm(next.folder) || norm(s.folder ?? "") === norm(next.folder)));
+      && norm(place(s, ps) ?? "") === norm(next.folder));
     if (at) { this.openSpace(at); return false; }
     run("space.new", { folder: next.folder, machine: next.machine ?? "" });
     return true;
