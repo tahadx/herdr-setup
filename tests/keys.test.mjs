@@ -108,8 +108,8 @@ check("the sheet polls the same hand-off",
 // Adding or removing a space makes Herdr focus the new terminal. The list asked
 // for it, so it takes the keyboard back, in steps as the app settles.
 check("a space made from the list keeps the keyboard there",
-  /run\("space\.new"\); this\.reclaim\(cx\)/.test(side)
-  && /if \(this\.kb\(\)\) this\.reclaim\(cx\)/.test(side));
+  /if \(this\.newSpace\(\) && this\.kb\(\)\) this\.reclaim\(cx\)/.test(side)
+  && (side.match(/this\.newSpace\(\)/g) ?? []).length >= 4);
 check("the sidebar claims the keyboard again as the app settles",
   /reclaim\(cx\) \{[\s\S]{0,120}\[40, 140, 340, 700\]/.test(side));
 check("a held key ends when it is let go",

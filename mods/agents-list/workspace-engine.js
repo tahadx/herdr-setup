@@ -257,13 +257,36 @@ export const isRemoving = (path, machine) => Boolean(path) && removingList()
 
 // The space already standing in a folder — the same place, not one of its
 // subfolders. A pin is a place, so this is what says "there is a space here".
+// Only the live place counts: a space made in the folder and used somewhere
+// else is somewhere else, and claiming it for a pin would turn the pin into
+// that other place (the "reel" pin showing a `~` space's row and opening it).
 export function spaceAt(folder, on, all = spaces(), ps = panes()) {
   const f = norm(folder);
   if (!f) return null;
-  // Either where a terminal is now or the folder the space was made in: a space
-  // whose shell has cd'd somewhere else still stands in its own folder.
   return all.find((s) => (s.machine ?? null) === (on ?? null)
-    && (norm(place(s, ps) ?? "") === f || norm(s.folder ?? "") === f)) ?? null;
+    && norm(place(s, ps) ?? "") === f) ?? null;
+}
+
+// The git read a space stands for: its live place first, then the folder it was
+// made in. The fallback matters when the program in the pane reports a folder
+// outside the repo (an agent starts its shell at `~`): the live place is not a
+// repository, but the space's own folder is, and dropping the read made the
+// reel space lose its repo — and its worktrees lose the place they hang under.
+// A linked read (a worktree) wins over a main-checkout read of the same space; a
+// read of a different repository at the live place wins over the folder.
+export function spaceRead(s, git = workspace.git, ps = panes()) {
+  if (!s) return null;
+  const places = [...new Set([place(s, ps), s.folder].filter(Boolean).map(tidyPath))];
+  const reads = places.map((f) => git?.[`${s.machine ?? ""}${SEP}${f}`]).filter((g) => g?.repo);
+  const g = reads.find((x) => x.linked) ?? reads[0];
+  if (!g?.repo) return null;
+  return {
+    key: g.repo,
+    main: g.repo.split(SEP)[1] ?? "",
+    root: g.root,
+    branch: g.branch,
+    linked: Boolean(g.linked),
+  };
 }
 
 export async function git(cwd, args, on, timeout) {
@@ -763,8 +786,10 @@ export function pinnedRepo(p, git = workspace.git) {
 export function pinRows(all = spaces()) {
   const live = new Map(all.map((s) => [s.id, s]));
   // Pins saved before pins had ids name their place by folder, never a space.
+  // Only the live place counts; a space made there and used elsewhere is not
+  // the place, and handing it the pin would move the pin out of its folder.
   const at = (p) => all.find((s) => (s.machine ?? null) === (p.machine ?? null)
-    && (norm(place(s) ?? "") === norm(p.folder) || norm(s.folder ?? "") === norm(p.folder)));
+    && norm(place(s) ?? "") === norm(p.folder));
   return pinnedList().map((p) => ({ p, s: (p.id ? (live.get(p.id) ?? null) : (at(p) ?? null)) }));
 }
 
@@ -797,6 +822,38 @@ export function openSpaceFor(path, on, all = spaces(), ps = panes()) {
   const target = norm(path);
   return all.find((s) => (s.machine ?? null) === (on ?? null)
     && (inside(norm(place(s, ps)), target) || inside(norm(s.folder), target)));
+}
+
+// Where a new space should start when the focused place is a worktree. A space
+// is a place; a worktree is a checkout under its repo, and a second space in
+// that checkout is drawn as another worktree row instead of a place. So the new
+// space starts in the repo's main checkout. A shell that has cd'd out of the
+// checkout keeps Herdr's own default — the folder it is in now — because that is
+// the place the person moved to. The same rule covers a pinned space whose pane
+// reports a folder outside the pin (an agent at `~`): the new space belongs to
+// the pinned place. Null means "leave the default".
+export function newSpaceFolder(all = spaces(), ps = panes()) {
+  const active = (all ?? []).find((s) => s.active);
+  if (!active) return null;
+  const rec = spaceRecord(active);
+  const panesNow = ps ?? [];
+  const at = panesNow.find((p) => p.focused && p.cwd)?.cwd ?? place(active, panesNow);
+  if (rec?.isWorktree && rec.main) {
+    const root = rec.worktreePath ?? rec.root ?? null;
+    if (!root) return null;
+    if (!at || !inside(norm(at), norm(root))) return null;
+    return { folder: rec.main, machine: active.machine ?? null };
+  }
+  const pin = pinnedList().find((p) => p.id === active.id);
+  // Only when the pane is not in another repository: a shell that cd'd into a
+  // second repo has moved to a place of its own, and a new space there belongs
+  // to it. The fallback is for the program that reports `~` (or another
+  // non-repo folder) while the space still stands in the pinned place.
+  const liveRepo = at ? workspace.git?.[`${active.machine ?? ""}${SEP}${tidyPath(at)}`]?.repo : null;
+  if (pin?.folder && !liveRepo && (!at || !inside(norm(at), norm(pin.folder)))) {
+    return { folder: pin.folder, machine: pin.machine ?? null };
+  }
+  return null;
 }
 
 // What a frame's tree depends on. Both views skip rebuilding it while this stays
@@ -1008,25 +1065,36 @@ export class Workspace extends View {
   }
 
   // A pin names a place, and its space id is how it finds that place while the
-  // space lives. When the space is gone and exactly one space stands in the
-  // pin's folder again — the one its own row opened, or one made there by hand —
-  // the pin takes that space, so the place stays pinned and the row keeps its
-  // slot. Two spaces in one folder are two places and a pin cannot say which:
-  // it waits as a place row, exactly as it did before. Pins saved before pins had
-  // ids are given one the same way, once.
+  // space lives. When the space is gone, the pin waits as a place row: its own
+  // row starts a new space there, and only that space takes the pin back. A
+  // space another click or a shell made in the same folder is a different place,
+  // even when the folder is where it was made — claiming it was how the reel pin
+  // became the `~` space and opened from home. Pins saved before pins had ids are
+  // given one once, and only to a space actually standing in their folder.
   bindPins(all = spaces()) {
     const list = pinnedList();
     const byId = new Map(all.map((s) => [s.id, s]));
     const held = new Set(list.filter((p) => p.id && byId.has(p.id)).map((p) => p.id));
+    // The space a pin's own row just opened (see `openRow`). Fresh for a minute,
+    // just long enough for the core to make the space and the next paint to see
+    // it; folder and machine name the place, the id names the pin.
+    const opening = shared("pin.opening");
+    const fresh = opening && Date.now() - (opening.at ?? 0) < 60_000 ? opening : null;
+    const openedFor = (p) => Boolean(fresh)
+      && norm(fresh.folder ?? "") === norm(p.folder ?? "")
+      && (fresh.machine ?? null) === (p.machine ?? null)
+      && (fresh.id ? fresh.id === p.id : !p.id);
     // The one space this pin's place holds that no other pin has claimed.
     const claim = (p) => {
       if (!p.folder) return null;
+      if (p.id && !openedFor(p)) return null;
       const at = all.filter((s) => !held.has(s.id)
         && (s.machine ?? null) === (p.machine ?? null)
-        && (norm(place(s) ?? "") === norm(p.folder) || norm(s.folder ?? "") === norm(p.folder)));
+        && norm(place(s) ?? "") === norm(p.folder));
       return at.length === 1 ? at[0] : null;
     };
     let changed = false;
+    let usedOpening = false;
     for (const p of list) {
       const here = p.id ? byId.get(p.id) : null;
       // A pin taken before pins kept their repo learns it while the space is
@@ -1035,14 +1103,28 @@ export class Workspace extends View {
         const gk = spaceRecord(here)?.groupKey;
         if (gk) { p.repo = gk; changed = true; }
       }
+      // A rename belongs to the pinned place too: a space the person named is
+      // the pin's name once it closes, and clearing the name goes back to the
+      // folder. Without this a rename lived only while the space did.
+      if (here?.named && (p.name !== here.name || !p.named)) {
+        p.name = here.name;
+        p.named = true;
+        changed = true;
+      } else if (here && !here.named && p.named) {
+        p.named = false;
+        changed = true;
+      }
       if (here) continue;
+      const opened = openedFor(p);
       const s = claim(p);
       if (!s) continue;
       held.add(s.id);
       p.id = s.id;
       p.name = p.name || s.name;
       changed = true;
+      if (opened) usedOpening = true;
     }
+    if (usedOpening || (opening && !fresh)) setShared("pin.opening", null);
     if (changed) writePins(list, "gave a pin the place it names");
   }
 
@@ -1274,12 +1356,54 @@ export class Workspace extends View {
 
   // Opening a space with no terminal anywhere — no tabs, or only mod panes —
   // starts a shell there, so a pinned space whose terminal is gone still lands
-  // you somewhere to type.
+  // you somewhere to type. It starts in the space's place, never in the machine's
+  // home: a space made in `reel` whose pane has wandered must come back to
+  // `reel`, not open `~` and rename the place after it.
   openSpace(s) {
     const cur = spaces().find((x) => x.id === s.id) ?? s;
     run("space.select", { id: cur.id });
     const tabs = new Set((cur.tabs ?? []).map((t) => t.id));
-    if (!panes().some((p) => p.terminal && tabs.has(p.tab))) run("tab.new", { space: cur.id });
+    if (!panes().some((p) => p.terminal && tabs.has(p.tab))) {
+      const pin = this.spacePin(cur);
+      run("tab.new", { space: cur.id, folder: pin?.folder ?? place(cur) ?? cur.folder });
+    }
+  }
+
+  // New space: a place, never a second checkout of the same repo. From a
+  // worktree it belongs in the repo's main checkout; a space already standing
+  // there is gone to instead of opening a second one in that folder. Anywhere
+  // else Herdr's own default — the focused terminal's folder — is already the
+  // place the person is working. True means a space was made; false means an
+  // existing place was opened.
+  newSpace() {
+    const all = spaces();
+    const ps = panes();
+    const next = newSpaceFolder(all, ps);
+    if (!next) { run("space.new"); return true; }
+    const at = all.find((s) => (s.machine ?? null) === (next.machine ?? null)
+      && !spaceRecord(s)?.isWorktree
+      && (norm(place(s, ps) ?? "") === norm(next.folder) || norm(s.folder ?? "") === norm(next.folder)));
+    if (at) { this.openSpace(at); return false; }
+    run("space.new", { folder: next.folder, machine: next.machine ?? "" });
+    return true;
+  }
+
+  // Hand a pin to the space actually standing in its place (the pin row found
+  // it there), without touching another pin's space. This is the one path that
+  // binds a pin to a space it did not open itself.
+  bindPin(p, s) {
+    if (!p || !s?.id) return false;
+    const list = pinnedList();
+    const i = list.findIndex((x) => (p.id ? x.id === p.id : samePin(x, p)));
+    if (i < 0 || list[i].id === s.id) return false;
+    const next = [...list];
+    next[i] = { ...next[i], id: s.id, name: next[i].name || s.name };
+    if (s.named) {
+      next[i].name = s.name;
+      next[i].named = true;
+    }
+    writePins(next, `bound ${next[i].name ?? p.folder} to the space in its folder`);
+    return true;
   }
 
   // An agent's own pane when it has one (the listed agent wins over a stale row),
@@ -1328,18 +1452,31 @@ export class Workspace extends View {
       // folder up instead found another space — or none, and opened a duplicate
       // in a place that already had one.
       const own = p.id ? spaces().find((x) => x.id === p.id) : null;
-      // A place with no space of its own: another space standing in that folder
-      // is that place. Go to it rather than open a second one, and say so.
+      // A place with no space of its own: another space actually standing in
+      // that folder is that place. Go to it and give the pin to it, so one place
+      // has one row. A space merely made in the folder but working elsewhere is
+      // not there (`spaceAt` reads the live place, never the made-in folder).
       const existing = own ? null : spaceAt(p.folder, p.machine ?? null);
-      if (own) this.openSpace(own);
-      else if (existing) {
+      if (own) {
+        setShared("pin.opening", null);
+        this.openSpace(own);
+      } else if (existing) {
+        setShared("pin.opening", null);
+        if (!this.spacePin(existing)) this.bindPin(p, existing);
         this.openSpace(existing);
         notify({
           title: "That folder already has a space",
           body: `${existing.name} is open there. Went to it instead of opening a second one.`,
           level: "warning",
         });
-      } else run("space.new", { folder: p.folder, ...(p.named ? { name: p.name } : {}), machine: p.machine ?? "" });
+      } else {
+        // The row starts the space it promises. The marker gives that space the
+        // pin when it appears; no later space made in the folder can take it.
+        setShared("pin.opening", {
+          id: p.id ?? null, folder: p.folder, machine: p.machine ?? null, at: Date.now(),
+        });
+        run("space.new", { folder: p.folder, ...(p.named ? { name: p.name } : {}), machine: p.machine ?? "" });
+      }
     } else if (r.kind === "checkout") {
       this.openCheckout(r);
     } else if (r.kind === "agent") {

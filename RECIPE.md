@@ -104,14 +104,23 @@ not, in the sidebar and in the sheet), and neither the worktree's space menu nor
 the sheet's `Ctrl+P` offers to pin one — a pin keeps a place, and a checkout is
 not a place of its own.
 
+**A new space is a place, never a checkout.** Made while the focused terminal is
+in a worktree, it starts in the repo's main checkout — and goes to the space
+already open there when one is — because a space inside the checkout would be
+drawn as another worktree row instead of a place. A pinned space whose program
+reports a folder outside the pin (an agent at `~`) is the same case: its new
+space belongs to the pinned place. A shell that has `cd`'d out of the worktree
+keeps Herdr's own default, the folder it is in now. The sidebar's `+`, its "New
+space" row, `N`, `Alt+Shift+N` and the layout's `Ctrl+Shift+N` all take this rule.
+
 **A pinned space is never closed, and nothing else is protected with it.** The pin
 is the promise: the sidebar's two-second sweep skips a pinned space even when its
 folder is gone (it stays in the list, named `(deleted)`, with one toast), the space
 menu does not offer "Close space" while it is pinned, and the sheet answers `Ctrl+D`
 with a line instead of a dialog. A pin is also the place: its row keeps the slot it
-was pinned in, and a space opened where a pinned space used to be — the pin row's
-own click, or one made in that folder — takes that pin, so the row comes back
-pinned in the same line. Two spaces in one folder are two places, and the pin waits
+was pinned in, and the space the pin row itself starts there takes that pin, so
+the row comes back pinned in the same line. A space made in the folder by another
+path does not take it: two spaces in one folder are two places, and the pin waits
 as a place row instead of guessing which one it means. A place keeps the repo it
 names: with the space gone, its unopened checkouts and the worktree spaces that
 hang under no space any more stay under the place row, whose avatar keeps the
@@ -425,21 +434,28 @@ foreground `#c1c1c1`, selection `#333333`, accent/solid `#8a9a7b`).
   otherwise the buttons are absent. They default to `["files", "changes"]`.
 - **Pins are ids, not folders.** Two spaces in one folder can both be pinned;
   a pin without an id (older state) matches by folder, and only while no other
-  live space sits there.
+  live space sits there. A pin with an id keeps waiting as a place row when its
+  space is gone; only the space its own row starts takes it, so a space made in
+  the folder (or an agent that reports it) cannot steal the pin.
 - **A pin is saved where the space is, not where it was made.** A space created
   in one folder and used in another is named after the second; a pin saved with
   the first opens a shell in the wrong place and comes up under another name. So
   `setPin` stores `place(space)`, and a row reads the name its click will give it
-  (`pinLabel`: a named pin keeps its name, an unnamed one reads its folder).
-- **A space stands in its folder** even when a terminal inside it has cd'd
-  elsewhere, so `spaceAt` matches a pin against both the live place and the
-  space's own folder. Matching only the live place kept a dead pin alive when its
-  folder was occupied (the space was open there, just working somewhere else).
+  (`pinLabel`: a named pin keeps its name, an unnamed one reads its folder). A
+  pinned row draws the pin's place, not the program's report inside it: an agent
+  at `~` must not turn the reel pin's row into `~`.
+- **A space's repo is read from its live place, then its own folder.** An agent
+  that reports a folder outside the repo (opencode at `~`) must not erase the repo
+  the space stands in; without the fallback the reel space lost its record, and
+  every worktree under reel lost its parent row.
+- **A space stands where it works.** `spaceAt` matches only the live place, never
+  the folder a space was made in: a space made in `reel` and used at `~` is at
+  `~`, and handing it a `reel` pin moved the pin out of its place. The space's
+  own folder is the fallback for its git read, not for "which place is this".
 - **One place, one space.** A pin row never opens a second space in a folder that
-  already has one: it goes to that space and says so with a warning toast. A pin
-  whose space is gone while another space stands in its folder is dropped when
-  the sheet opens (`bindPins` → `spaceAt`), so the list cannot hold two rows for
-  one place. Three "herdr-app" rows is what that guard is for.
+  already has one: it goes to the space actually standing there, gives the pin
+  that space and says so with a warning toast. A pin whose space is gone stays a
+  place row; its own click starts the one space that takes the pin back.
 - **No paths in the sheet.** A pin row is read by its name; another machine's name
   is the only extra it shows. Where a shell starts is Herdr's own bookkeeping.
 - **`theme: "omarchy"` must exist.** Without `themes/omarchy.json` the window

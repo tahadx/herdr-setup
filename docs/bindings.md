@@ -29,7 +29,7 @@ themselves, only while they hold the keyboard, so they never shadow a terminal.
 | `ctrl-1` / `ctrl-2` / `ctrl-3` / `ctrl-4` / `ctrl-5` / `ctrl-6` / `ctrl-7` / `ctrl-8` / `ctrl-9` | Show the space in that position |
 | `ctrl-shift-pagedown` / `alt-down` | Show the next space |
 | `ctrl-shift-pageup` / `alt-up` | Show the previous space |
-| `ctrl-shift-n` | Make a space |
+| `ctrl-shift-n` | Make a space (from a worktree: the repo's main checkout) |
 | `shift-f2` | Rename the space |
 | `alt-shift-up` | Show the previous agent |
 | `alt-shift-down` | Show the next agent |
@@ -74,7 +74,7 @@ themselves, only while they hold the keyboard, so they never shadow a terminal.
 | `ctrl-shift-m` | Move the sidebar to the other side |
 | `ctrl-shift-d` | Make a worktree in the active space's repo |
 | `alt-b` | Put the keyboard in the sidebar, and back |
-| `alt-shift-n` | Make a space |
+| `alt-shift-n` / `ctrl-shift-n` | Make a space (from a worktree: the repo's main checkout) |
 | `alt-shift-q` | Close the active space |
 | `alt-w` | Make a worktree |
 | `alt-shift-w` | Open one of the repo's worktrees |
@@ -192,7 +192,6 @@ your other sections and merges this layout's. The three sections are `global`,
     "ctrl-?": "app.help",
     "ctrl-shift-/": "app.help",
     "ctrl-shift-?": "app.help",
-    "ctrl-shift-n": "space.new",
     "ctrl-shift-t": "tab.new",
     "alt-f": "mod.open:agents-list",
     "ctrl-shift-p": "app.palette",
@@ -248,6 +247,7 @@ your other sections and merges this layout's. The three sections are `global`,
     "ctrl-shift-b": "agents-list.toggle_sidebar",
     "alt-b": "agents-list.focus_sidebar",
     "alt-shift-n": "agents-list.new_space",
+    "ctrl-shift-n": "agents-list.new_space",
     "alt-shift-q": "agents-list.close_space",
     "alt-w": "agents-list.worktree_new",
     "alt-shift-w": "agents-list.worktree_open",

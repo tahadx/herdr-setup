@@ -830,6 +830,11 @@ export class Palette extends Workspace {
       if (r.kind === "space") {
         const s = r.s;
         const branch = this.spaceGit(s, this.paneSnap)?.branch ?? s.branch;
+        // A pin is a place: an unnamed pin reads its folder even when the program
+        // in the space reports another folder (the reel pin read `~`). A space
+        // the person named keeps that name.
+        const pin = r.inPins ? this.spacePin(s) : null;
+        const shown = pin && !pin.named && !s.named ? pinLabel(pin) : this.spaceName(s);
         return h_flex().id(`pal-${r.inPins ? "pin-" : ""}${s.id}`).relative().mx(4).pl(10 + (r.depth ?? 0) * 16).pr(10).h(36).rounded(9).gap(9).items_center()
           .when(on, (el) => el.bg(wash(t.accent, "16")))
           .when(!on, (el) => el.hover((x) => x.bg(wash(t.foreground, "0b"))))
@@ -877,10 +882,10 @@ export class Palette extends Workspace {
           .when(!this.isWorktree(s), (el) => el.child(this.avatar(t, s, Boolean(r.inPins))
             .when(s.active, (a) => a.border_color(wash(t.accent, "b0")))))
           .when(this.isWorktree(s), (el) => el.child(svg("mods/workspace-chrome/branch.svg").size(13).flex_none().text_color(t.muted)))
-          .child(this.label(this.spaceName(s), t, 12.5, s.active ? t.foreground : t.muted, s.active))
+          .child(this.label(shown, t, 12.5, s.active ? t.foreground : t.muted, s.active))
           .when(s.active, (el) => el.child(div().flex_none().px(5).h(15).rounded(4).bg(wash(t.accent, "18"))
             .text_size(9).font_medium().text_color(t.accent).flex().items_center().child("current")))
-          .when(Boolean(branch) && branch !== s.name && !this.isWorktree(s), (el) => el.child(div().flex_none().max_w(130).truncate().px(5).h(17).rounded(4)
+          .when(Boolean(branch) && branch !== shown && !this.isWorktree(s), (el) => el.child(div().flex_none().max_w(130).truncate().px(5).h(17).rounded(4)
             .bg(wash(t.foreground, "0c")).text_size(9.5).text_color(wash(t.muted, "cc")).flex().items_center().child(branch)))
           .when(Boolean(s.machine), (el) => el.child(div().flex_none().max_w(90).truncate().text_size(9.5).text_color(wash(t.muted, "cc")).child(s.machine)))
           .child(marker(Boolean(r.inPins) && !this.isWorktree(s) && Boolean(this.spacePin(s))

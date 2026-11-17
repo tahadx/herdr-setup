@@ -9,7 +9,7 @@ import {
   pinnedList, pinnedRepo, isPinned, checkouts, dropGitCache, worktreeTree, spaceColor, RANK, MARK,
   pinLabel, folderColor,
   onGitRefresh, takeGitAsk, touchWorkspace, listedCheckouts, pictureKey,
-  beginPaint, endPaint, frameCache, spaceRecord, pinSpace, persistWorkspace,
+  beginPaint, endPaint, frameCache, spaceRecord, pinSpace, persistWorkspace, spaceRead,
   checkoutRecordOf, groupKeyOf, worktreeSiblings, movePathWithin, machineIndexOf,
   orderedPaths, orderedPlaces, SEP,
 } from "./workspace-engine.js";
@@ -740,16 +740,12 @@ export class Sidebar extends Workspace {
       changed = true;
     }
     for (const s of all) {
-      const at = place(s, ps) ?? s.folder;
-      const g = this.git?.[`${s.machine ?? ""}${SEP}${tidyPath(at ?? "")}`];
-      if (!g?.repo) continue;
-      const read = {
-        key: g.repo,
-        main: g.repo.split(SEP)[1] ?? "",
-        root: g.root,
-        branch: g.branch,
-        linked: Boolean(g.linked),
-      };
+      // The live place first, the folder the space was made in second. An agent
+      // that reports a folder outside the repo (opencode at `~`) must not erase
+      // the place the space stands in: without the fallback the reel space lost
+      // its repo record, and every worktree under reel lost its parent row.
+      const read = spaceRead(s, this.git, ps);
+      if (!read) continue;
       if (pinSpace(s, read)) changed = true;
     }
     if (changed) {
@@ -1055,7 +1051,7 @@ export class Sidebar extends Workspace {
     if (c === "toggle_sidebar") return toggleSidebar();
     // A space made with the keyboard in the list keeps the list: the new
     // terminal would take the keys.
-    if (c === "new_space") { run("space.new"); if (this.kb()) this.reclaim(cx); return; }
+    if (c === "new_space") { if (this.newSpace() && this.kb()) this.reclaim(cx); return; }
     if (!space) return;
     if (c === "close_space") this.closeRow({ kind: "space", s: space });
     else if (c === "worktree_new") this.newWorktree(space);
@@ -1573,7 +1569,7 @@ export class Sidebar extends Workspace {
             : k === "end" ? () => this.walk(1e6, cx)
               : k === "enter" ? () => this.activate(cx)
                 : k === "escape" || k === "q" ? () => this.leave(cx)
-                  : k === "n" ? () => { run("space.new"); this.reclaim(cx); }
+                  : k === "n" ? () => { if (this.newSpace() && this.kb()) this.reclaim(cx); }
                     : k === "g" ? () => this.command("worktree_open", cx)
                       : k === "f" ? () => this.foldEntry(cx)
                         : null;
@@ -1663,7 +1659,7 @@ export class Sidebar extends Workspace {
         // removing its checkout: neither is offered a close of its own, so the
         // menu cannot lead to a dialog that would only refuse or half-do it.
         ...(pin || isWorktreeSpace ? [] : [{ id: "sm-close", icon: "x", label: "Close space", act: closeSpace }]),
-        { id: "sm-new-space", icon: "plus", label: "New space", act: then(() => run("space.new")) },
+        { id: "sm-new-space", icon: "plus", label: "New space", act: then(() => this.newSpace()) },
       ];
     }
 
@@ -2267,6 +2263,15 @@ export class Sidebar extends Workspace {
     const removed = this.removedWorktrees(spaceList, paneList);
     this.removedNow = removed;
     const pinsNow = this.shownPins(spaceList, paneList);
+    // A pinned row names the place, never the program's report of where it is:
+    // an agent at `~` made the reel pin read `~` and open home. A space the person
+    // named keeps its own name, so renames still show.
+    const pinOfSpace = (s) => pinsNow.find(({ s: live }) => live?.id === s?.id)?.p ?? null;
+    const placeName = (s, sect) => {
+      if (!/pinned$/.test(String(sect))) return this.spaceName(s);
+      const p = pinOfSpace(s);
+      return p && !p.named && !s?.named ? pinLabel(p) : this.spaceName(s);
+    };
     // One layout read for the width, the rail and the header. `layout()` copies
     // the whole tree, and this frame used to ask for it twice.
     const sort = sortOf();
@@ -2364,13 +2369,15 @@ export class Sidebar extends Workspace {
       const appAt = new Map(spaceList.map((sp, i) => [sp.id, i]));
       const cell = (sp) => {
         const at = appAt.get(sp.id);
+        const p = pinOfSpace(sp);
+        const name = p && !p.named && !sp.named ? pinLabel(p) : this.spaceName(sp);
         return {
           key: sp.id,
-          tip: [this.spaceName(sp), STATE[sp.status], at != null && at < RAIL_MAX_SPACES ? `Ctrl+${at + 1}` : null].filter(Boolean).join(" \u00b7 "),
+          tip: [name, STATE[sp.status], at != null && at < RAIL_MAX_SPACES ? `Ctrl+${at + 1}` : null].filter(Boolean).join(" \u00b7 "),
           active: sp.active,
           status: sp.status,
           fill: spaceColor(t, sp),
-          initial: initial(this.spaceName(sp)),
+          initial: initial(name),
           act: () => run("space.select", { id: sp.id }),
         };
       };
@@ -2656,6 +2663,7 @@ export class Sidebar extends Workspace {
         const hidden = open ? 0 : kids.length + worktreesOf(s).length + checkoutsOf(s).length;
         const top = kids.reduce((m, a) => ((RANK[a.status] ?? 0) > (RANK[m] ?? 0) ? a.status : m), null);
         const topTone = top === "blocked" ? t.blocked : top === "done" ? t.done : top === "working" ? t.accent : null;
+        const label = placeName(s, sect);
         const index = tree ? groupRank(s.id, forest.parents.get(s.id)) : allSpaces.indexOf(s);
         const from = this.pressed === null ? -1
           : (tree && this.pressParent != null ? groupRank(this.pressed, this.pressParent) : allSpaces.findIndex((x) => x.id === this.pressed));
@@ -2776,7 +2784,7 @@ export class Sidebar extends Workspace {
           .when(!tree && !linked, (el) => el.child(div().size(18).flex_none().rounded(5).bg(fill).relative()
             .flex().items_center().justify_center()
             .border(1).border_color(s.active ? wash(t.accent, "66") : wash(t.foreground, "17"))
-            .text_size(9).font_semibold().text_color("#ffffff").child([...s.name][0]?.toUpperCase() ?? "?")
+            .text_size(9).font_semibold().text_color("#ffffff").child([...label][0]?.toUpperCase() ?? "?")
             // Pinned is the one section not named after a state, so there the
             // tile carries it as a bead on the corner, like a portrait's status.
             .when(/pinned$/.test(sect) && Boolean(s.status) && s.status !== "idle", (el) => el.child(div()
@@ -2786,8 +2794,8 @@ export class Sidebar extends Workspace {
               .tooltip(s.status === "blocked" ? "Needs you" : s.status === "done" ? "Done" : "Working")))))
           .child(div().flex_shrink(1).min_w(30).truncate().text_size(12)
             .when(s.active, (el) => el.font_medium())
-            .text_color(s.active ? t.foreground : wash(t.foreground, "e6")).child(this.spaceName(s)))
-          .when(Boolean(g), (el) => el.child(this.gitTail(g, tree, s.name, t)))
+            .text_color(s.active ? t.foreground : wash(t.foreground, "e6")).child(label))
+          .when(Boolean(g), (el) => el.child(this.gitTail(g, tree, label, t)))
           .when(hidden > 0, (el) => el.child(countPill(t, hidden, topTone)))
           .child(div().size(18).flex_none().flex().items_center().justify_center()
             .when(kids.length > 0 || worktreesOf(s).length > 0 || checkoutsOf(s).length > 0, (el) => el.child(div()
@@ -2901,7 +2909,7 @@ export class Sidebar extends Workspace {
         const id = `sp-${s.id}`;
         const open = !this.folded.has(id);
         out.push(spaceRow(s, kids, depth, sect));
-        this.entries.push({ key: id, kind: "space", id: s.id, name: this.spaceName(s), linked: forest.worktrees.has(s.id), sect, at: out.length - 1 });
+        this.entries.push({ key: id, kind: "space", id: s.id, name: placeName(s, sect), linked: forest.worktrees.has(s.id), sect, at: out.length - 1 });
         if (!open) return;
         kids.forEach((a, i) => {
           order.push(a.address);
@@ -3231,7 +3239,7 @@ export class Sidebar extends Workspace {
               .child(this.iconButton(t, "ag-search", "mods/icons/search.svg", "Search \u00b7 Alt+F",
                 () => run("mod.open", { name: "agents-list" })))
               .child(div().w(1).h(14).mx(1).flex_none().bg(wash(t.foreground, "10")))
-              .when(bySpaces, (el) => el.child(this.iconButton(t, "ag-new-space", "mods/workspace-chrome/plus.svg", "New space", () => run("space.new"))))
+              .when(bySpaces, (el) => el.child(this.iconButton(t, "ag-new-space", "mods/workspace-chrome/plus.svg", "New space", () => this.newSpace())))
               .child(this.iconButton(t, "ag-hide", "mods/icons/sidebar.svg", "Collapse sidebar", toggleSidebar))),
         ),
       )
@@ -3256,7 +3264,7 @@ export class Sidebar extends Workspace {
           .child(h_flex().id("empty-new-space").mt(6).h(28).px(10).gap(6).rounded(7).items_center()
             .bg(wash(t.accent, "16")).text_color(t.accent).cursor_pointer()
             .hover((x) => x.bg(wash(t.accent, "26")).text_color(t.foreground))
-            .on_click(() => run("space.new"))
+            .on_click(() => this.newSpace())
             .child(svg("mods/icons/plus.svg").size(12))
             .child(div().text_size(11.5).font_medium().child("New space")))]
         : rows, "spaces", { padTop: 3, padBottom: 3 }));

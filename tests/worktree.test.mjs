@@ -118,11 +118,15 @@ check("opening a checkout goes to the space standing there, even after a cd",
 check("opening a checkout nobody stands in finds no space",
   !openSpaceFor(other, null, [repo, wt], []));
 
-// Both views read the name from the checkout, not from Herdr's live name.
+// Both views read the name from the checkout, not from Herdr's live name — and
+// a pinned row from the pin's place, through the same helper.
 check("the sidebar names a row through the shared rule",
-  /\.child\(this\.spaceName\(s\)\)/.test(sidebar));
+  /const label = placeName\(s, sect\);/.test(sidebar)
+  && /\.child\(label\)/.test(sidebar)
+  && /const placeName = \(s, sect\) =>/.test(sidebar));
 check("the sheet names a row through the shared rule",
-  /this\.label\(this\.spaceName\(s\)/.test(palette) && /\.child\(\[\.\.\.this\.spaceName\(s\)\]/.test(palette));
+  /const shown = pin && !pin\.named && !s\.named \? pinLabel\(pin\) : this\.spaceName\(s\);/.test(palette)
+  && /this\.label\(shown/.test(palette) && /\.child\(\[\.\.\.this\.spaceName\(s\)\]/.test(palette));
 check("the sidebar answers with the checkout's branch",
   /worktreeName\(s\) \{[\s\S]{0,260}return c\?\.branch/.test(sidebar));
 check("the sheet answers with the checkout's branch",
@@ -162,6 +166,40 @@ check("one git scan runs at a time",
   /if \(this\.gitRunning\)/.test(sidebar));
 check("a stale sheet read cannot overwrite a newer one",
   /this\.loadGen/.test(palette));
+
+// A new space made while the focused place is a worktree belongs to the repo's
+// main checkout, never inside the checkout: a space there is another worktree
+// row, not a place. An existing main place is gone to instead of a second one.
+{
+  const at = core.indexOf("  newSpace() {");
+  const end = core.indexOf("\n  }", at) + 4;
+  const build = (folder, all) => {
+    const calls = [];
+    const fn = new Function("newSpaceFolder", "spaces", "spaceRecord", "norm", "place", "panes", "run",
+      `${core.slice(at, end).replace("  newSpace() {", "function newSpace() {")}; return newSpace;`)(
+      () => folder, () => all, (s) => s.record ?? null, norm,
+      (s) => s.live ?? s.folder, () => [], (name, args) => calls.push([name, args]));
+    const self = { paneSnap: [], openSpace: (s) => calls.push(["openSpace", s.id]) };
+    return { made: fn.call(self), calls };
+  };
+  const wt = { id: "w", name: "typing", folder: "/wt", machine: null, record: { isWorktree: true } };
+  const place = { id: "p", name: "reel", folder: "/repo", machine: null, record: { isWorktree: false } };
+  let go = build({ folder: "/repo", machine: null }, [wt, place]);
+  check("new space in a worktree goes to the repo's main place",
+    go.made === false && go.calls[0]?.[0] === "openSpace" && go.calls[0]?.[1] === "p",
+    JSON.stringify(go.calls));
+  go = build({ folder: "/repo", machine: null }, [wt]);
+  check("new space in a worktree starts the main place when none is open",
+    go.made === true && go.calls[0]?.[0] === "space.new"
+      && go.calls[0]?.[1]?.folder === "/repo", JSON.stringify(go.calls));
+  go = build(null, [wt]);
+  check("new space anywhere else keeps Herdr's default",
+    go.made === true && go.calls[0]?.[0] === "space.new" && go.calls[0]?.[1] === undefined,
+    JSON.stringify(go.calls));
+  check("the sidebar's New space uses the shared place rule",
+    /if \(c === "new_space"\) \{ if \(this\.newSpace\(\)/.test(sidebar)
+    && /"New space", \(\) => this\.newSpace\(\)/.test(sidebar));
+}
 
 console.log(failures ? `\n${failures} worktree check(s) failed` : "all worktree checks passed");
 process.exit(failures ? 1 : 0);

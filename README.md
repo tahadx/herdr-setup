@@ -28,7 +28,9 @@ stops the agent or removes the checkout. `Esc` or `Alt+F` closes the sheet.
 place keeps its line above the spaces: no dialog closes it, a shell exiting
 leaves the row with its checkouts under it, and opening it again comes back to
 the same slot. A pin opens its own space by id and falls back to its folder
-only when that space is gone. `Ctrl+P` again unpins it.
+only when that space is gone; the row names the place, never a folder the
+program inside happens to report, and a new space started from it opens there.
+`Ctrl+P` again unpins it.
 
 ## The sidebar
 
@@ -47,6 +49,9 @@ its edge between 44 and 480 px.
   `Files` and `Changes` open those panels; `+` starts a tab.
 - **Worktrees.** Nested under their repo with branch, ahead/behind and
   uncommitted marks; the row's menu makes, opens and removes them.
+- **New space is a place.** Made while you are in a worktree it starts in the
+  repo's main checkout — or goes to the space already open there — instead of
+  becoming another row in the same checkout.
 - **Pins first**, then the rest. Click a row to go there, right-click for its
   menu.
 - **A bar of its own.** When a list outgrows its box, a 3 px accent thumb runs

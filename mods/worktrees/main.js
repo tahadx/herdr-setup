@@ -426,7 +426,9 @@ export default class Worktree extends View {
     // A space with no terminal left (no tabs, or only mod panes) opens a shell.
     const tabs = new Set((s.tabs ?? []).map((t2) => t2.id));
     run("space.select", { id: s.id });
-    if (!panes().some((p) => p.terminal && tabs.has(p.tab))) run("tab.new", { space: s.id });
+    if (!panes().some((p) => p.terminal && tabs.has(p.tab))) {
+      run("tab.new", { space: s.id, folder: place(s) ?? s.folder });
+    }
   }
 
   // true when the dialog took the key, so it doesn't also reach the panel below.

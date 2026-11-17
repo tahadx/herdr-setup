@@ -136,14 +136,18 @@ const check = (label, ok, extra = "") => {
 
   let pins = [];
   let live = [];
+  let opening = null;
   let pinRecord = null;
   let pinColors = {};
-  // The real "is a space standing here", with place() reading the space's folder.
+  // The real "is a space standing here": the live place, not the folder it was
+  // made in. `cwd` lets a case say "made here, working elsewhere".
+  const place = (s) => s.cwd ?? s.folder;
   const spaceAt = new Function("norm", "place", "spaces", "panes",
-    `${top("mods/agents-list/workspace-engine.js", "spaceAt")}; return spaceAt;`)(norm, (s) => s.folder, () => live, () => []);
+    `${top("mods/agents-list/workspace-engine.js", "spaceAt")}; return spaceAt;`)(norm, place, () => live, () => []);
   // The factory returns the class; the test needs one copy of it.
-  const make = () => new (palette(() => copy(pins), (_k, v) => { pins = v; }, () => live, norm,
-    () => copy(pins), pinKey, samePin, (s) => s.folder, (next) => { pins = next; }, spaceAt,
+  const make = () => new (palette((key) => (key === "pin.opening" ? copy(opening) : copy(pins)),
+    (key, v) => { if (key === "pin.opening") opening = v; else pins = v; }, () => live, norm,
+    () => copy(pins), pinKey, samePin, place, (next) => { pins = next; }, spaceAt,
     () => pinRecord, () => null, () => copy(pinColors)))();
 
   const F = "/work/shared";
@@ -172,6 +176,21 @@ const check = (label, ok, extra = "") => {
   p.setPin(live[0]);
   check("palette: unpinning a space's only pin actually removes it",
     pins.length === 0, JSON.stringify(pins));
+
+  // A rename belongs to the place: the pin keeps the new name when the space
+  // closes, and goes back to its folder when the name is cleared.
+  opening = null;
+  pins = [{ id: "sp1", folder: F, name: "old", named: false }];
+  live = [{ id: "sp1", folder: F, name: "renamed", named: true }];
+  p = make();
+  p.bindPins();
+  check("palette: renaming a pinned space renames its pin",
+    pins[0].name === "renamed" && pins[0].named === true, JSON.stringify(pins));
+  live = [{ id: "sp1", folder: F, name: "shared", named: false }];
+  p = make();
+  p.bindPins();
+  check("palette: clearing a space's name goes back to the pin's folder",
+    pins[0].named === false, JSON.stringify(pins));
 
   pins = [{ id: "sp1", folder: F }, { id: "sp2", folder: F }];
   live = [{ id: "sp1", folder: F }, { id: "sp2", folder: F }, { id: "sp3", folder: F, name: "three" }];
@@ -203,11 +222,31 @@ const check = (label, ok, extra = "") => {
   // stays pinned, instead of the new space coming up unpinned at the bottom.
   pins = [{ id: "a", folder: "/w/a" }, { id: "dead", folder: F }, { id: "c", folder: "/w/c" }];
   live = [{ id: "a", folder: "/w/a" }, { id: "sp1", folder: F }, { id: "c", folder: "/w/c" }];
+  opening = { id: "dead", folder: F, machine: null, at: Date.now() };
   p = make();
   p.bindPins();
-  check("palette: a pin takes the space standing in its place, in its slot",
+  check("palette: a pin takes the space its own row opened, in its slot",
     pins.length === 3 && pins[1].id === "sp1" && pins[0].id === "a" && pins[2].id === "c",
     JSON.stringify(pins));
+  check("palette: the opening marker is spent once the pin has its space",
+    opening === null, JSON.stringify(opening));
+
+  // A space the person made in the folder, or a shell started there, is not the
+  // pin's space: it may have been made in reel and used at home, and handing the
+  // pin to it was how the reel pin became `~`.
+  pins = [{ id: "dead", folder: F }];
+  live = [{ id: "sp1", folder: F }];
+  opening = null;
+  p = make();
+  p.bindPins();
+  check("palette: a dead pin does not take an unrelated space in its folder",
+    pins[0].id === "dead", JSON.stringify(pins));
+  opening = { id: "dead", folder: F, machine: null, at: Date.now() };
+  live = [{ id: "sp1", folder: F, cwd: "/home/me" }];
+  p = make();
+  p.bindPins();
+  check("palette: a space made in the folder but working elsewhere is not the place",
+    pins[0].id === "dead", JSON.stringify(pins));
 
   // The Pinned section reads the pin list, so a move between two pins moves the
   // pin; `space.move` alone would leave the row drawn where it was.
@@ -269,7 +308,7 @@ const check = (label, ok, extra = "") => {
   let live = [{ id: "a", folder: "/w/a" }, { id: "c", folder: "/w/c" }];
   const pinRows = new Function("pinnedList", "spaces", "norm", "place",
     `${top("mods/agents-list/workspace-engine.js", "pinRows")}; return pinRows;`)(
-    () => copy(pins), () => live, norm, (s) => s.folder);
+    () => copy(pins), () => live, norm, (s) => s.cwd ?? s.folder);
   let rows = pinRows();
   check("pin rows: a place with no space keeps its line",
     rows.length === 3 && rows[0].s?.id === "a" && rows[1].p.id === "dead"
@@ -285,6 +324,12 @@ const check = (label, ok, extra = "") => {
   rows = pinRows();
   check("pin rows: an old pin without an id reads the space in its folder",
     rows[0].s?.id === "a", JSON.stringify(rows));
+  // A space made in the folder and used elsewhere is not standing there.
+  pins = [{ folder: "/w/a", machine: null }];
+  live = [{ id: "a", folder: "/w/a", cwd: "/home/me" }];
+  rows = pinRows();
+  check("pin rows: a space made there but working elsewhere is not the place",
+    rows[0].s === null, JSON.stringify(rows));
 }
 
 // The two views paint a closed pin with the same face: the colour saved on the
@@ -305,6 +350,34 @@ check("palette: a closed pin wears its saved colour",
     pinnedRepo(p, { "\u001f/w/repo": { repo: "\u001f/w/repo" } }) === "\u001f/w/repo");
   check("pins: with no scan answer its folder is the main checkout",
     pinnedRepo(p, {}) === "\u001f/w/repo");
+}
+
+// A space made in a repo but reported elsewhere (an agent at `~`) keeps the
+// repo it stands in: the read falls back to the space's own folder, so its
+// worktrees stay attached under it.
+{
+  const SEP = "\u001f";
+  const tidyPath = (p) => (p ?? "").replace(/\/+$/, "");
+  const place = (s) => s.cwd ?? s.folder;
+  const spaceRead = new Function("workspace", "place", "panes", "tidyPath", "SEP",
+    `${top("mods/agents-list/workspace-engine.js", "spaceRead")}; return spaceRead;`)(
+    { git: {} }, place, () => [], tidyPath, SEP);
+  const reel = { repo: `${SEP}/home/me/reel`, root: "/home/me/reel", branch: "main", linked: false };
+  const other = { repo: `${SEP}/work/other`, root: "/work/other", branch: "work", linked: false };
+  const link = { repo: `${SEP}/home/me/reel`, root: "/home/me/worktrees/reel/x", branch: "x", linked: true };
+  const s = { machine: null, folder: "/home/me/reel" };
+  let read = spaceRead({ ...s, cwd: "/home/me" }, { [`${SEP}/home/me`]: null, [`${SEP}/home/me/reel`]: reel }, []);
+  check("space read: a live place outside the repo falls back to the space's folder",
+    read?.key === reel.repo, JSON.stringify(read));
+  read = spaceRead({ ...s, cwd: "/work/other" }, { [`${SEP}/work/other`]: other, [`${SEP}/home/me/reel`]: reel }, []);
+  check("space read: a live place in another repo wins over the folder",
+    read?.key === other.repo, JSON.stringify(read));
+  read = spaceRead({ ...s, cwd: "/home/me/reel" }, { [`${SEP}/home/me/reel`]: reel }, []);
+  check("space read: a main checkout read answers with its repo",
+    read?.key === reel.repo && read.linked === false, JSON.stringify(read));
+  read = spaceRead({ ...s, cwd: "/home/me/reel" }, { [`${SEP}/home/me/reel`]: link, [`${SEP}/home/me/reel/`]: reel }, []);
+  check("space read: a linked checkout read wins",
+    read?.key === reel.repo && read.linked === true, JSON.stringify(read));
 }
 
 console.log(failures ? `\n${failures} failed` : "\nall pin checks passed");
