@@ -47,9 +47,6 @@ its edge between 44 and 480 px.
   `Files` and `Changes` open those panels; `+` starts a tab.
 - **Worktrees.** Nested under their repo with branch, ahead/behind and
   uncommitted marks; the row's menu makes, opens and removes them.
-- **New space is a place.** Made while you are in a worktree it starts in the
-  repo's main checkout — or goes to the space already open there — instead of
-  becoming another row in the same checkout.
 - **Pins first**, then the rest. Click a row to go there, right-click for its
   menu.
 - **A bar of its own.** When a list outgrows its box, a 3 px accent thumb runs

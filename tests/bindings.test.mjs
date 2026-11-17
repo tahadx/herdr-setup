@@ -79,9 +79,6 @@ check("the layout section carries the search key",
 check("the layout section carries its tab and space numbers",
   keys["layout:workspace"]?.["alt-1"] === "tab.select:1"
   && keys["layout:workspace"]?.["ctrl-1"] === "space.select:1");
-check("the layout's New space goes through the sidebar's place rule",
-  keys["layout:workspace"]?.["ctrl-shift-n"] === "agents-list.new_space",
-  "ctrl-shift-n would inherit the focused worktree's folder");
 check("install.sh adds app-wide keys only where the person has none",
   /for name in \("global", "terminal"\)/.test(install)
   && /if key in target or \(not fill and key in ours\)/.test(install),

@@ -799,24 +799,6 @@ export function openSpaceFor(path, on, all = spaces(), ps = panes()) {
     && (inside(norm(place(s, ps)), target) || inside(norm(s.folder), target)));
 }
 
-// Where a new space should start when the focused place is a worktree. A space
-// is a place; a worktree is a checkout under its repo, and a second space in
-// that checkout is drawn as another worktree row instead of a place. So the new
-// space starts in the repo's main checkout. A shell that has cd'd out of the
-// checkout keeps Herdr's own default — the folder it is in now — because that is
-// the place the person moved to. Null means "leave the default".
-export function newSpaceFolder(all = spaces(), ps = panes()) {
-  const active = (all ?? []).find((s) => s.active);
-  const rec = active ? spaceRecord(active) : null;
-  if (!rec?.isWorktree || !rec.main) return null;
-  const root = rec.worktreePath ?? rec.root ?? null;
-  if (!root) return null;
-  const panesNow = ps ?? [];
-  const at = panesNow.find((p) => p.focused && p.cwd)?.cwd ?? place(active, panesNow);
-  if (!at || !inside(norm(at), norm(root))) return null;
-  return { folder: rec.main, machine: active.machine ?? null };
-}
-
 // What a frame's tree depends on. Both views skip rebuilding it while this stays
 // put: an agent changing status, or a character typed into the sheet, does not
 // move a checkout. `all` is the space list already in hand, so this does not
@@ -1298,25 +1280,6 @@ export class Workspace extends View {
     run("space.select", { id: cur.id });
     const tabs = new Set((cur.tabs ?? []).map((t) => t.id));
     if (!panes().some((p) => p.terminal && tabs.has(p.tab))) run("tab.new", { space: cur.id });
-  }
-
-  // New space: a place, never a second checkout of the same repo. From a
-  // worktree it belongs in the repo's main checkout; a space already standing
-  // there is gone to instead of opening a second one in that folder. Anywhere
-  // else Herdr's own default — the focused terminal's folder — is already the
-  // place the person is working. True means a space was made; false means an
-  // existing place was opened.
-  newSpace() {
-    const all = spaces();
-    const ps = panes();
-    const next = newSpaceFolder(all, ps);
-    if (!next) { run("space.new"); return true; }
-    const at = all.find((s) => (s.machine ?? null) === next.machine
-      && !spaceRecord(s)?.isWorktree
-      && (norm(place(s, ps) ?? "") === norm(next.folder) || norm(s.folder ?? "") === norm(next.folder)));
-    if (at) { this.openSpace(at); return false; }
-    run("space.new", { folder: next.folder, machine: next.machine ?? "" });
-    return true;
   }
 
   // An agent's own pane when it has one (the listed agent wins over a stale row),

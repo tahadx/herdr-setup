@@ -1055,7 +1055,7 @@ export class Sidebar extends Workspace {
     if (c === "toggle_sidebar") return toggleSidebar();
     // A space made with the keyboard in the list keeps the list: the new
     // terminal would take the keys.
-    if (c === "new_space") { if (this.newSpace() && this.kb()) this.reclaim(cx); return; }
+    if (c === "new_space") { run("space.new"); if (this.kb()) this.reclaim(cx); return; }
     if (!space) return;
     if (c === "close_space") this.closeRow({ kind: "space", s: space });
     else if (c === "worktree_new") this.newWorktree(space);
@@ -1573,7 +1573,7 @@ export class Sidebar extends Workspace {
             : k === "end" ? () => this.walk(1e6, cx)
               : k === "enter" ? () => this.activate(cx)
                 : k === "escape" || k === "q" ? () => this.leave(cx)
-                  : k === "n" ? () => { if (this.newSpace() && this.kb()) this.reclaim(cx); }
+                  : k === "n" ? () => { run("space.new"); this.reclaim(cx); }
                     : k === "g" ? () => this.command("worktree_open", cx)
                       : k === "f" ? () => this.foldEntry(cx)
                         : null;
@@ -1663,7 +1663,7 @@ export class Sidebar extends Workspace {
         // removing its checkout: neither is offered a close of its own, so the
         // menu cannot lead to a dialog that would only refuse or half-do it.
         ...(pin || isWorktreeSpace ? [] : [{ id: "sm-close", icon: "x", label: "Close space", act: closeSpace }]),
-        { id: "sm-new-space", icon: "plus", label: "New space", act: then(() => this.newSpace()) },
+        { id: "sm-new-space", icon: "plus", label: "New space", act: then(() => run("space.new")) },
       ];
     }
 
@@ -3231,7 +3231,7 @@ export class Sidebar extends Workspace {
               .child(this.iconButton(t, "ag-search", "mods/icons/search.svg", "Search \u00b7 Alt+F",
                 () => run("mod.open", { name: "agents-list" })))
               .child(div().w(1).h(14).mx(1).flex_none().bg(wash(t.foreground, "10")))
-              .when(bySpaces, (el) => el.child(this.iconButton(t, "ag-new-space", "mods/workspace-chrome/plus.svg", "New space", () => this.newSpace())))
+              .when(bySpaces, (el) => el.child(this.iconButton(t, "ag-new-space", "mods/workspace-chrome/plus.svg", "New space", () => run("space.new"))))
               .child(this.iconButton(t, "ag-hide", "mods/icons/sidebar.svg", "Collapse sidebar", toggleSidebar))),
         ),
       )
@@ -3256,7 +3256,7 @@ export class Sidebar extends Workspace {
           .child(h_flex().id("empty-new-space").mt(6).h(28).px(10).gap(6).rounded(7).items_center()
             .bg(wash(t.accent, "16")).text_color(t.accent).cursor_pointer()
             .hover((x) => x.bg(wash(t.accent, "26")).text_color(t.foreground))
-            .on_click(() => this.newSpace())
+            .on_click(() => run("space.new"))
             .child(svg("mods/icons/plus.svg").size(12))
             .child(div().text_size(11.5).font_medium().child("New space")))]
         : rows, "spaces", { padTop: 3, padBottom: 3 }));
