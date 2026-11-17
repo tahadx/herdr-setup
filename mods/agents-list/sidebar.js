@@ -2890,7 +2890,7 @@ export class Sidebar extends Workspace {
             .text_color(wash(t.foreground, "e6")).child(name))
           .when(Boolean(p.machine), (el) => el.child(div().max_w(60).truncate().text_size(9.5).text_color(t.dim).child(p.machine)))
           .child(div().flex_1())
-          .child(svg("mods/agents-list/pin.svg").size(12).flex_none().text_color(wash(t.accent, "8c")));
+          .child(svg("mods/icons/pin.svg").size(12).flex_none().text_color(wash(t.accent, "8c")));
       };
 
       const out = [];
@@ -3050,7 +3050,11 @@ export class Sidebar extends Workspace {
         if (!repo) return [];
         const out = [];
         for (const c of trees) {
-          const key = `${c.on ?? ""}${SEP}${tidyPath(c.path)}`;
+          // The tree keys its checkouts with NUL (`<on>\0<path>`), the same key
+          // `opened` and `checkoutParents` hold. A SEP here missed both sets, so
+          // a checkout already open as a worktree space was drawn a second time
+          // as an unopened row under the pin.
+          const key = `${c.on ?? ""}\u0000${tidyPath(c.path)}`;
           if (`${c.on ?? ""}${SEP}${tidyPath(c.repoMain ?? "")}` !== repo) continue;
           if (forest.checkoutParents.has(key) || forest.opened.has(key)) continue;
           if (isRemoving(c.path, c.on)) continue;

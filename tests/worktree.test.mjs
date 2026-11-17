@@ -88,6 +88,29 @@ check("an unopened checkout hangs there too, so the repo's line is whole",
 check("a checkout that already has a space is not listed a second time",
   !out.checkoutParents.has(`\u0000${tree}`), JSON.stringify([...out.checkoutParents]));
 
+// The sidebar's Pinned section draws the same checkouts: a pin whose space has
+// exited must not list a checkout a live worktree space already stands in, or
+// the row appears twice under one place.
+{
+  const at = sidebar.indexOf("const pinCheckouts = (p) => {");
+  let depth = 0;
+  let end = -1;
+  for (let i = at; at >= 0 && i < sidebar.length; i++) {
+    if (sidebar[i] === "{") depth++;
+    else if (sidebar[i] === "}" && --depth === 0) { end = i + 1; break; }
+  }
+  if (end < 0) throw new Error("sidebar.js: no pinCheckouts");
+  const tidyPath = (p) => norm(p).replace(/\/+$/, "");
+  const pinCheckouts = new Function("pinRepo", "trees", "forest", "isRemoving", "orderedPaths", "SEP", "tidyPath",
+    `${sidebar.slice(at, end)}; return pinCheckouts;`)(
+    () => `\u001f${main}`, checkouts.filter((c) => !c.main),
+    { checkoutParents: new Map(), opened: new Set([`\u0000${tree}`]) },
+    () => false, (_repo, list) => list, "\u001f", tidyPath);
+  const drawn = pinCheckouts({ folder: main }).map((c) => c.path);
+  check("a pinned repo does not draw an open worktree a second time",
+    !drawn.includes(tree) && drawn.includes(other), JSON.stringify(drawn));
+}
+
 // A shell that wandered off still finds the space standing in its checkout.
 const { openSpaceFor } = factory(norm, base, shared, (s) => (s.live ?? s.folder), () => null);
 check("opening a checkout goes to the space standing there, even after a cd",
