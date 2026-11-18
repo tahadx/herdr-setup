@@ -7,7 +7,7 @@ import { agents, terminals, panes, focused, spaces, machines, run, exec, hc, the
 import {
   Workspace, wash, place, norm, tidyPath, base, inWorktrees, isRemoving, removingList,
   pinnedList, pinnedRepo, isPinned, checkouts, dropGitCache, worktreeTree, spaceColor, RANK, MARK,
-  pinLabel, folderColor,
+  pinLabel, folderColor, placeCount,
   onGitRefresh, takeGitAsk, touchWorkspace, listedCheckouts, pictureKey,
   beginPaint, endPaint, frameCache, spaceRecord, pinSpace, persistWorkspace, spaceRead, inside,
   checkoutRecordOf, groupKeyOf, worktreeSiblings, movePathWithin, machineIndexOf,
@@ -2564,8 +2564,10 @@ export class Sidebar extends Workspace {
       this.worktreeSpaces = forest.worktrees;
       // "Spaces" means places to work, not the checkouts under them: a worktree
       // space is drawn under its repo, and counting it again read as a space
-      // nobody could see. Agents are not spaces either.
-      this.spaceCount = allSpaces.filter((s) => !forest.worktrees.has(s.id)).length;
+      // nobody could see. A pin is a place too: when its space's shell exits the
+      // row stays (and opens a shell there), so the count must not drop with the
+      // space. Agents are not spaces either.
+      this.spaceCount = placeCount(allSpaces, pinsNow, (s) => forest.worktrees.has(s.id));
 
       // A worktree just made from a folded space opens it, or it would land unseen.
       const owner = shared("worktree.owner");
@@ -2805,7 +2807,10 @@ export class Sidebar extends Workspace {
           .child(div().flex_shrink(1).min_w(30).truncate().text_size(12)
             .when(s.active, (el) => el.font_medium())
             .text_color(s.active ? t.foreground : wash(t.foreground, "e6")).child(label))
-          .when(Boolean(g), (el) => el.child(this.gitTail(g, tree, label, t)))
+          // The tail takes the row's slack, so the fold and the pin sit at the
+          // end. A place without git yet (a new space, a folder outside a repo)
+          // has no tail: the spacer does that job, or the pin lands mid-row.
+          .child(g ? this.gitTail(g, tree, label, t) : div().flex_1())
           .when(hidden > 0, (el) => el.child(countPill(t, hidden, topTone)))
           .child(div().size(18).flex_none().flex().items_center().justify_center()
             .when(kids.length > 0 || worktreesOf(s).length > 0 || checkoutsOf(s).length > 0, (el) => el.child(div()

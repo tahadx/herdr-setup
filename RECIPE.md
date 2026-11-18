@@ -98,7 +98,10 @@ part of its space.
 **Counts mean spaces.** The sidebar's header pill and the sheet's subtitle count
 places to work — never agents, never the worktrees hung under their repo — so the
 number matches the spaces you can name (a worktree space is drawn under its
-checkout and is not counted again). A pin's glyph belongs to a space row: an
+checkout and is not counted again). A pin is a place on the same terms: a pinned
+space whose shell exits keeps its row above the others, and it keeps its number
+with it, so closing a pinned place never reads as a place quietly disappearing
+while its line is still there. A pin's glyph belongs to a space row: an
 agent's pin lives in its right-click menu, a worktree row shows none (hovered or
 not, in the sidebar and in the sheet), and neither the worktree's space menu nor
 the sheet's `Ctrl+P` offers to pin one — a pin keeps a place, and a checkout is
@@ -182,7 +185,10 @@ and offers to make one.
 
 - Click an agent row: that agent gets the keyboard (`agent.focus`). An agent's
   pin lives in its right-click menu (`terminal.pin`), not on the row; a space row
-  reveals its own pin button on hover (accent when pinned, `setPin`). A sub-agent
+  reveals its own pin button on hover (accent when pinned, `setPin`). The pin
+  slot is the row's last control, so a pinned place and the row the keyboard is
+  on both show it at the right edge — a place with no git tail yet (a new space)
+  keeps that edge with a spacer where the tail would be. A sub-agent
   sits indented under its parent behind a `↳`, with its own state mark.
 - Click a terminal row: `tab.select` then `pane.focus` — the row is the tab and
   the pane at once. Clicking the `Files` or `Changes` button shows that panel on

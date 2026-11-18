@@ -26,11 +26,14 @@ stops the agent or removes the checkout. `Esc` or `Alt+F` closes the sheet.
 
 `Ctrl+P` in the sheet or the sidebar pins the place under the row. A pinned
 place keeps its line above the spaces: no dialog closes it, a shell exiting
-leaves the row with its checkouts under it, and opening it again comes back to
-the same slot. A pin opens its own space by id and falls back to its folder
-only when that space is gone; a pinned row names the place, never a folder the
-program inside happens to report, and a new space started from it opens there.
-Every other unnamed row is the path it is in. `Ctrl+P` again unpins it.
+leaves the row with its checkouts under it, and the header still counts it as a
+space — the number never drops while the row is there. Opening it again comes
+back to the same slot. A pin opens its own space by id and falls back to its
+folder only when that space is gone; a pinned row names the place, never a
+folder the program inside happens to report, and a new space started from it
+opens there. Every other unnamed row is the path it is in. `Ctrl+P` again
+unpins it. The pin sits at the row's end, visible when pinned and on the row
+the keyboard is on.
 
 ## The sidebar
 

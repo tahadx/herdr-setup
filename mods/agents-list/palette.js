@@ -9,7 +9,7 @@ import {
   pinnedList, pinnedRepo, isRemoving, removingList, folderColor, pinLabel, norm, base,
   tidyPath, spaceColor, worktreeTree, RANK, askGit, listedCheckouts, pictureKey,
   beginPaint, endPaint, frameCache, scoreTerms, termsOf, spaceRecord,
-  groupKeyOf, orderedPaths, orderedPlaces, movePathWithin, machineIndexOf, persistWorkspace,
+  groupKeyOf, orderedPaths, orderedPlaces, placeCount, movePathWithin, machineIndexOf, persistWorkspace,
   touchWorkspace, SEP,
 } from "./workspace-engine.js";
 
@@ -353,7 +353,8 @@ export class Palette extends Workspace {
     // the slot it was pinned in: a place whose space is gone keeps its line, as
     // it does in the sidebar, and the space a click opens there takes it back.
     const heldPins = new Set();
-    const pinRowList = this.shownPins(all, ps)
+    const shownPins = this.shownPins(all, ps);
+    const pinRowList = shownPins
       .filter(({ s }) => {
         if (!s) return true;
         if (heldPins.has(s.id)) return false;
@@ -414,6 +415,11 @@ export class Palette extends Workspace {
       for (const s of homeless) emit(s, 0, new Set());
       orphans.forEach((w) => out.push({ kind: "worktree", c: w.c, repo: w.repo, on: w.on, depth: 0 }));
     }
+    // The header's number: places to work. A pin whose space closed keeps its
+    // row — a click starts a shell there — so it is still a space, and exiting a
+    // pinned space's shell must not take one off the count while the row stays.
+    // A checkout under its repo (worktree space or listed one) is not a place.
+    this.placeTotal = placeCount(all, shownPins, (s) => this.isWorktree(s));
     return out;
   }
 
@@ -1068,7 +1074,7 @@ export class Palette extends Workspace {
             .child(div().flex_none().text_size(10).text_color(t.muted)
               .child(this.filter.trim()
                 ? `${rows.filter((r) => r.hit).length} ${rows.filter((r) => r.hit).length === 1 ? "match" : "matches"}`
-                : `${places.length} ${places.length === 1 ? "space" : "spaces"}`))
+                : `${this.placeTotal ?? places.length} ${(this.placeTotal ?? places.length) === 1 ? "space" : "spaces"}`))
             .when(tally["needs you"] > 0, (el) => el.child(chip("needs you")))
             .when(tally.working > 0, (el) => el.child(chip("working")))
             .when(tally.done > 0, (el) => el.child(chip("done")))))

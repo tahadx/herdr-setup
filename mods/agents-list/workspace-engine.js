@@ -791,6 +791,19 @@ export function pinRows(all = spaces()) {
   return pinnedList().map((p) => ({ p, s: (p.id ? (live.get(p.id) ?? null) : (at(p) ?? null)) }));
 }
 
+// What both headers count: places to work, never agents and never a checkout
+// hung under its repo. A pin is a place whether or not its space is open: its
+// row stays, and a click starts a shell in the folder, so a pinned place whose
+// shell exited must not take a number off the count while its row is still
+// there. A pinned worktree is still a checkout drawn under its repo, so it
+// counts only in the Pinned ribbon. `pins` is `shownPins(all)`; `isWorktree`
+// is the view's own test, so a worktree space is never counted twice.
+export function placeCount(all = [], pins = [], isWorktree = () => false) {
+  const live = (all ?? []).filter((s) => !isWorktree(s)).length;
+  const waiting = (pins ?? []).filter((row) => !row?.s).length;
+  return live + waiting;
+}
+
 // A pinned space is never closed. The same rule, spelled the same way, in the
 // sidebar, the dialogs and here: a pin names its space by id, or — pins saved
 // before ids — by the place it was pinned at.
