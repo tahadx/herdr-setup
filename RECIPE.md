@@ -278,18 +278,24 @@ and offers to make one.
   a toast, it reports to its parent).
 - The footer of the sheet is its own cheat line: `↵ switch`, `^J/^K move`,
   `^R rename`, `^A worktree`, `^P unpin`/`^P pin`, `^⇧J/^⇧K reorder`.
-- **A step is one place, and only a space steps.** A step is one place in the
-  space order (over the agent and worktree rows between spaces, and past the
-  pinned/unpinned line, which pins or unpins so the row lands where it was put).
-  It reads `aimedReorder()`, not `spaces()`: a `space.move` lands asynchronously,
-  and reading the app's order twice within one frame aimed two presses at the
-  same neighbour — the second then did nothing ("it only moves one row"). The aim
-  is trusted for 1.2 s and only while it still lists the same spaces. With a
-  search the footer says where the space landed (`reel-studio · 2 of 5`), since a
-  ranked list does not move; at either end of the order nothing happens, and
-  nothing is said. **Only a space row moves** — a worktree row, an agent row and a
-  pin row are not places in the order, so they get no `move` hint and the keys do
-  nothing on them.
+- **A step is one row in the group, and only a space steps.** A group is the
+  Pinned ribbon or one status section. A pinned row steps through the ribbon's
+  slots, one per pin, in the order the pins were made: a pin whose space has
+  exited keeps its row, so the step passes it too (skipping it made the press
+  after it jump two rows at once). A status section steps in the app's order
+  inside that section. Neither view steps across a group edge: the ribbon and a
+  status section are rebuilt from their own lists, so a row put across one would
+  not stay there, and a reorder never pins or unpins (that is `Ctrl+P` alone).
+  The step reads `aimedReorder()`, not `spaces()`: a `space.move` lands
+  asynchronously, and reading the app's order twice within one frame aimed two
+  presses at the same neighbour — the second then did nothing ("it only moves one
+  row"). The aim is trusted for 1.2 s and only while it still lists the same
+  spaces. With a search the footer says where the space landed
+  (`reel-studio · 2 of 5`), since a ranked list does not move; at the end of the
+  group nothing happens, nothing is said, and a held key stops repeating instead
+  of repainting a list that cannot move. **Only a space row moves** — a worktree
+  row, an agent row and a pin row are not places in the order, so they get no
+  `move` hint and the keys do nothing on them.
 
 **The rest of the furniture**
 

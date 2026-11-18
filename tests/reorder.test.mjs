@@ -33,6 +33,37 @@ function from(src, where, name) {
 }
 const method = (name) => from(core, "workspace-engine.js", name);
 
+// A module-level `const` arrow, such as `placeGroup`.
+function pickConst(src, name) {
+  const at = src.indexOf(`const ${name} =`);
+  if (at < 0) throw new Error(`no ${name}`);
+  const end = src.indexOf(";\n", at) + 2;
+  return src.slice(at, end);
+}
+
+// A module-level function declaration, e.g. `groupPlaces`.
+function pickFn(src, name) {
+  const at = src.indexOf(`function ${name}(`);
+  if (at < 0) throw new Error(`no ${name}`);
+  let depth = 0;
+  for (let i = at; i < src.length; i++) {
+    const c = src[i];
+    if (c === "(" || c === "{" || c === "[") depth++;
+    else if (c === ")" || c === "}" || c === "]") {
+      depth--;
+      if (depth === 0 && c === "}") return src.slice(at, i + 1);
+    }
+  }
+  return src.slice(at);
+}
+
+const RANK_SRC = "const RANK = { blocked: 4, done: 3, working: 2, idle: 1 };";
+const groupHelpers = `${RANK_SRC}\n${pickConst(core, "placeGroup").replace(/^export /m, "")}\n${pickFn(core, "groupPlaces")}\n${pickFn(core, "ribbonPins")}`;
+const pinHelpers = `${pickConst(core, "norm").replace(/^export /m, "")}\n${pickConst(core, "pinKey").replace(/^export /m, "")}\n${pickConst(core, "samePin").replace(/^export /m, "")}`;
+const groupPlaces = new Function(`${groupHelpers}; return groupPlaces;`)();
+const samePin = new Function(`${pinHelpers}; return samePin;`)();
+const ribbonPins = new Function(`${groupHelpers}; return ribbonPins;`)();
+
 let failures = 0;
 const check = (label, ok, extra = "") => {
   if (!ok) failures++;
@@ -64,25 +95,30 @@ function applyMove(id, index) {
   order = rest;
 }
 
-function sheet() {
-  const make = new Function("spaces", "run", "machineIndexOf", `
+function sheet(pinStart = null) {
+  let pinList = (pinStart ?? []).map((p) => ({ ...p }));
+  const make = new Function("spaces", "run", "machineIndexOf", "pinnedList", "writePins", "samePin", `
     ${method("predictedSpaces")}
     ${method("noteSpaceMove")}
     ${method("aimedReorder")}
     ${method("reorderStep")}
+    ${method("pinnedStep")}
+    ${method("moveSpaceWithin")}
     ${method("landReorder")}
+    ${method("movePinSlot")}
+    ${method("movePinRow")}
     ${method("stopReorder")}
     ${method("startReorder")}
     return function make() {
       return {
         reorderId: null, reorderDir: 0, reorderSteps: 0, reorderStepAt: 0,
         reorderAim: null, reorderRaw: null, reorderRawAt: 0, reorderHold: null,
-        reorderIds: null, reorderAfter: null,
+        reorderPins: null, reorderAfter: null,
+        spacePin: (s) => pinnedList().find((p) => p.id === s?.id) ?? null,
         reorderIds: (list = spaces()) => list.map((s) => s.id),
-        landBefore: () => {},
-        movePinRow: () => {},
-        predictedSpaces, noteSpaceMove, aimedReorder, reorderStep, landReorder,
-        stopReorder, startReorder,
+        pinList: () => pinnedList(),
+        predictedSpaces, noteSpaceMove, aimedReorder, reorderStep, pinnedStep,
+        moveSpaceWithin, landReorder, movePinSlot, movePinRow, stopReorder, startReorder,
       };
     };`);
   const indexOf = (all, machine, id) => {
@@ -93,7 +129,7 @@ function sheet() {
   return make(spacesNow, (name, args) => {
     runs.push({ name, ...args });
     if (name === "space.move") applyMove(args.id, args.index);
-  }, indexOf)();
+  }, indexOf, () => pinList, (next) => { pinList = next; }, samePin)();
 }
 
 // ---- one step, one place -----------------------------------------------------
@@ -143,10 +179,11 @@ check("reorder: the first space does not wrap to the bottom", runs.length === 0,
 // pin row do nothing. Each view's beginReorder decides; both hand the work to a
 // shared engine method.
 {
-  const beginPalette = new Function("spaces", `return (${from(palette, "palette.js", "beginReorder").replace("function beginReorder", "function beginReorder")});`);
+  const beginPalette = new Function("spaces", `${groupHelpers}\nreturn (${from(palette, "palette.js", "beginReorder")});`);
   const runPalette = (sel, opts = {}) => {
     const moves = [];
     const paths = [];
+    let started = null;
     const self = {
       selected: () => sel,
       reorderSubject: () => opts.held ?? null,
@@ -155,12 +192,14 @@ check("reorder: the first space does not wrap to the bottom", runs.length === 0,
       pathPaths: opts.paths ?? null,
       pathAfter: opts.after ?? null,
       isWorktree: (s) => Boolean(s?.worktree || s?.linked),
-      startReorder: (space, dir) => moves.push([space.id, dir]),
+      shownPins: (list = order) => opts.pins ?? [],
+      spacePin: (s) => (opts.pinned?.has?.(s?.id) ? { id: s.id } : null),
+      startReorder: (space, dir, setup) => { moves.push([space.id, dir]); started = setup; },
       startPathReorder: (group, path, list, dir) => paths.push([path, dir]),
       reorderWorktreeRow: (row, dir) => paths.push([row.kind, dir]),
     };
     beginPalette(() => order).call(self, 1, null);
-    return { moves, paths };
+    return { moves, paths, ids: (list = order) => started?.ids?.(list), pins: started?.pins ?? null };
   };
   check("reorder: the sheet moves a space row", runPalette({ kind: "space", s: A }).moves.length === 1, "no move");
   check("reorder: the sheet does not move an agent row",
@@ -170,6 +209,51 @@ check("reorder: the first space does not wrap to the bottom", runs.length === 0,
   check("reorder: the sheet steps an opened worktree space inside its group",
     runPalette({ kind: "space", s: { ...A, worktree: true } }).paths.length === 1, "no step");
   check("reorder: the sheet does not move a pin row", runPalette({ kind: "pin" }).moves.length === 0, "moved");
+
+  // A step stays inside the group the row is drawn in: the Pinned ribbon, or
+  // one status section. The app's full order includes both, so stepping through
+  // it would aim at a row in another section and the space would not move (or
+  // would jump across the section on the next press).
+  const i1 = { id: "i1", name: "idle one", status: "idle", machine: null };
+  const i2 = { id: "i2", name: "idle two", status: "idle", machine: null };
+  const w1 = { id: "w1", name: "work one", status: "working", machine: null };
+  const w2 = { id: "w2", name: "work two", status: "working", machine: null };
+  const p1 = { id: "p1", name: "pin one", status: "idle", machine: null };
+  const p2 = { id: "p2", name: "pin two", status: "working", machine: null };
+  const groupOrder = [i1, w1, p1, i2, w2, p2];
+  const groupPins = [{ p: { id: "p1" }, s: p1 }, { p: { id: "p2" }, s: p2 }];
+  const groupOpts = { pins: groupPins, pinned: new Set(["p1", "p2"]) };
+  order = groupOrder;
+  check("reorder: a working row steps inside working spaces only",
+    runPalette({ kind: "space", s: w1 }, groupOpts).ids(groupOrder).join() === "w1,w2",
+    runPalette({ kind: "space", s: w1 }, groupOpts).ids(groupOrder).join());
+  check("reorder: an idle row steps inside idle spaces only",
+    runPalette({ kind: "space", s: i1 }, groupOpts).ids(groupOrder).join() === "i1,i2",
+    runPalette({ kind: "space", s: i1 }, groupOpts).ids(groupOrder).join());
+  check("reorder: a pinned row steps in the pin order",
+    runPalette({ kind: "space", s: p1, inPins: true }, groupOpts).ids(groupOrder).join() === "p1,p2",
+    runPalette({ kind: "space", s: p1, inPins: true }, groupOpts).ids(groupOrder).join());
+  check("reorder: a pinned row never steps through a status row",
+    !runPalette({ kind: "space", s: p1, inPins: true }, groupOpts).ids(groupOrder).includes("w1"));
+  check("reorder: a status row never steps through a pinned row",
+    !runPalette({ kind: "space", s: w1 }, groupOpts).ids(groupOrder).includes("p1"));
+  check("reorder: groupPlaces puts worktrees aside",
+    (() => {
+      const wt = { id: "wt", name: "checkout", status: "working", machine: null };
+      const fn = new Function(`${groupHelpers}; return groupPlaces;`)();
+      return fn([...groupOrder, wt], groupPins, "2", null, (s) => s.id === "wt").map((s) => s.id).join() === "w1,w2";
+    })());
+  // The Pinned ribbon's step list is slots, not live places: a pin whose shell
+  // exited keeps its row, so a step must be able to pass it.
+  const deadPin = { p: { id: "pd", folder: "/gone" }, s: null };
+  const ribbon = [{ p: { id: "p1", folder: "/p1" }, s: p1 }, deadPin, { p: { id: "p2", folder: "/p2" }, s: p2 }];
+  const ribbonOpts = { pins: ribbon, pinned: new Set(["p1", "p2"]) };
+  const sheetPinned = runPalette({ kind: "space", s: p2, inPins: true }, ribbonOpts);
+  check("reorder: the sheet's pinned step passes a pin with no space",
+    sheetPinned.pins?.(groupOrder).map(({ p }) => p.id).join() === "p1,pd,p2",
+    String(sheetPinned.pins?.(groupOrder).map(({ p }) => p.id).join()));
+  check("reorder: a status row has no ribbon slots",
+    runPalette({ kind: "space", s: w1 }, groupOpts).pins === null);
   // A press that lands before the sheet repainted still names the old row index,
   // which is now a different space. The step must keep moving the space the
   // reorder is about — otherwise a held key walks two spaces at once.
@@ -181,13 +265,14 @@ check("reorder: the first space does not wrap to the bottom", runs.length === 0,
       === '[["/w",1]]',
     JSON.stringify(runPalette({ kind: "space", s: A }, { moving: "/w", group: "g", paths: ["/w", "/x"] }).paths));
 
-  const beginSidebar = new Function("spaces", `return (${from(sidebar, "sidebar.js", "beginReorder")});`);
+  const beginSidebar = new Function("spaces", "ribbonPins", `return (${from(sidebar, "sidebar.js", "beginReorder")});`);
   const runSidebar = (entry, opts = {}) => {
     const moves = [];
     const paths = [];
     const row = (e) => (e?.kind === "checkout" ? { kind: "checkout", path: e.path, on: null }
       : e?.linked ? { kind: "space", s: { ...A, id: e.id, linked: true } }
         : e?.kind === "space" ? { kind: "space", s: B } : null);
+    let started = null;
     const self = {
       entry: () => entry,
       sidebarRow: row,
@@ -198,13 +283,14 @@ check("reorder: the first space does not wrap to the bottom", runs.length === 0,
       pathAfter: opts.after ?? null,
       isWorktree: (s) => Boolean(s?.worktree || s?.linked),
       drawnSpaces: () => [B],
-      startReorder: (space, dir) => moves.push([space.id, dir]),
+      shownPins: (list = order) => opts.pins ?? [],
+      startReorder: (space, dir, setup) => { moves.push([space.id, dir]); started = setup; },
       startPathReorder: (group, path, list, dir) => paths.push([path, dir]),
       reorderWorktreeRow: (r, e, dir) => paths.push([e.kind, dir]),
       sel: null,
     };
-    beginSidebar(() => order).call(self, 1, null);
-    return { moves, paths };
+    beginSidebar(() => order, ribbonPins).call(self, 1, null);
+    return { moves, paths, pins: started?.pins ?? null };
   };
   check("reorder: the sidebar moves a space row", runSidebar({ kind: "space", id: "a", sect: 1 }).moves.length === 1, "no move");
   check("reorder: the sidebar steps a linked checkout's space inside its group",
@@ -216,6 +302,13 @@ check("reorder: the first space does not wrap to the bottom", runs.length === 0,
     JSON.stringify(runSidebar({ kind: "space", id: "a", sect: 1 }, { held: B }).moves));
   check("reorder: the sidebar's space step list skips linked checkouts",
     /kind === "space" && e\.sect === sect && !e\.linked/.test(sidebar));
+  const sidePinned = runSidebar({ kind: "space", id: "a", sect: "sec-pinned" }, ribbonOpts);
+  check("reorder: the sidebar's pinned step passes an empty pin row",
+    sidePinned.pins?.(groupOrder).map(({ p }) => p.id).join() === "p1,pd,p2",
+    String(sidePinned.pins?.(groupOrder).map(({ p }) => p.id).join()));
+  check("reorder: the sidebar's status step has no ribbon slots",
+    runSidebar({ kind: "space", id: "a", sect: 1 }, groupOpts).pins === null);
+  check("reorder: the sidebar's pinned step reaches startReorder", sidePinned.moves.length === 1, "no move");
 }
 
 // ---- the aim is dropped when the spaces change under it ----------------------
@@ -245,18 +338,84 @@ Date.now = realNow;
 check("reorder: an old aim is not used once a step is long past",
   runs.length === 1 && runs[0].index === 2, JSON.stringify(runs));
 
-// ---- crossing the pinned line is a pin or an unpin ----------------------------
-{
-  const landBefore = from(palette, "palette.js", "landBefore");
-  const pinned = new Set(["a"]);
-  const pins = [];
-  const self = {
-    spacePin: (s) => (pinned.has(s.id) ? { id: s.id } : null),
-    setPin: (s) => pins.push(s.id),
-  };
-  new Function(`return (${landBefore});`)().call(self, A, B);
-  check("reorder: the sheet pins a space stepped across the pinned line", pins.join() === "a", pins.join());
-}
+// ---- a step at the end has nothing to repeat ----------------------------------
+order = [A, B];
+visible = null;
+s = sheet();
+let scheduled = 0;
+const fakeCx = { timer: { after: () => { scheduled++; return { cancel() {} }; }, every: () => ({ cancel() {} }) } };
+s.startReorder(A, -1, { ids: () => ["a", "b"] }, fakeCx);
+check("reorder: a hold at the end does not start a repaint loop", scheduled === 0, String(scheduled));
+s = sheet();
+s.startReorder(B, -1, { ids: () => ["a", "b"] }, fakeCx);
+check("reorder: a hold with somewhere to go repeats", scheduled === 1, String(scheduled));
+
+// ---- a pinned step is one ribbon row, empty slots included --------------------
+// The ribbon draws a row for every pin, and a pin whose shell exited keeps its
+// row. Stepping the live places only skipped that row, so the press after it
+// jumped two rows at once: "it does it good with kleeamp but always has two
+// jumps for the top spaces".
+const R = { id: "r", name: "reel", machine: null };
+const K = { id: "k", name: "kleeamp", machine: null };
+const H = { id: "h", name: "herdr-app", machine: null };
+const line = (ps) => ps.pinList().map((p) => p.id).join("");
+const pinnedSheet = () => {
+  const ps = sheet([
+    { id: "r", folder: "/reel", machine: null },
+    { id: "o", folder: "/omarchy", machine: null },   // its shell has exited
+    { id: "k", folder: "/kleeamp", machine: null },
+    { id: "h", folder: "/herdr-app", machine: null },
+  ]);
+  const live = new Map([["r", R], ["k", K], ["h", H]]);
+  ps.slots = () => ps.pinList().map((p) => ({ p, s: live.get(p.id) ?? null }));
+  ps.idsFor = (list = spacesNow()) => groupPlaces(list, ps.slots(), "pinned").map((x) => x.id);
+  ps.reorderIds = ps.idsFor;
+  ps.reorderPins = ps.slots;
+  return ps;
+};
+order = [R, K, H];
+visible = null;
+runs.length = 0;
+let ps = pinnedSheet();
+ps.reorderStep(H, -1);
+check("reorder: a pinned step passes one live row at a time", line(ps) === "rohk", line(ps));
+check("reorder: a pinned step still moves the space in the app",
+  runs.length === 1 && runs[0].id === "h" && runs[0].index === 2, JSON.stringify(runs));
+runs.length = 0;
+ps.reorderStep(H, -1);
+check("reorder: a pinned step past an empty pin moves one row, not two", line(ps) === "rhok", line(ps));
+check("reorder: a step past an empty pin sends no space.move", runs.length === 0, JSON.stringify(runs));
+ps.reorderStep(H, -1);
+check("reorder: the third pinned step reaches the top", line(ps) === "hrok", line(ps));
+const top = line(ps);
+const wrote = runs.length;
+ps.reorderStep(H, -1);
+check("reorder: the top of the ribbon does not wrap", line(ps) === top && runs.length === wrote, `${line(ps)} ${runs.length}`);
+
+// The note counts ribbon rows, so it says what the list shows.
+order = [R, K, H];
+visible = null;
+ps = pinnedSheet();
+let pinnedNote = null;
+ps.reorderAfter = (moved, step, total) => { pinnedNote = [moved.name, step, total]; };
+ps.reorderStep(H, -1);
+check("reorder: a pinned step says its row and the ribbon's size",
+  pinnedNote?.join(" ") === "herdr-app 3 4", String(pinnedNote));
+
+// ---- a pinned hold at the ribbon's end has nothing to repeat ------------------
+order = [R, K, H];
+visible = null;
+let pinnedScheduled = 0;
+const fakeCx2 = { timer: { after: () => { pinnedScheduled++; return { cancel() {} }; }, every: () => ({ cancel() {} }) } };
+ps = pinnedSheet();
+const pinnedOpts = { ids: (list = spacesNow()) => ps.idsFor(list), pins: () => ps.slots() };
+ps.startReorder(H, 1, pinnedOpts, fakeCx2);
+check("reorder: a pinned hold at the bottom of the ribbon does not repeat",
+  pinnedScheduled === 0, String(pinnedScheduled));
+ps = pinnedSheet();
+const pinnedTop = { ids: (list = spacesNow()) => ps.idsFor(list), pins: () => ps.slots() };
+ps.startReorder(H, -1, pinnedTop, fakeCx2);
+check("reorder: a pinned hold with a row above repeats", pinnedScheduled === 1, String(pinnedScheduled));
 
 console.log(failures ? `\n${failures} failed` : "\nall reorder checks passed");
 process.exit(failures ? 1 : 0);

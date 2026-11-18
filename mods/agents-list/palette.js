@@ -9,7 +9,7 @@ import {
   pinnedList, pinnedRepo, isRemoving, removingList, folderColor, pinLabel, norm, base,
   tidyPath, spaceColor, worktreeTree, RANK, askGit, listedCheckouts, pictureKey,
   beginPaint, endPaint, frameCache, scoreTerms, termsOf, spaceRecord,
-  groupKeyOf, orderedPaths, orderedPlaces, placeCount, movePathWithin, machineIndexOf, persistWorkspace,
+  groupKeyOf, orderedPaths, orderedPlaces, placeCount, placeGroup, groupPlaces, ribbonPins, movePathWithin, machineIndexOf, persistWorkspace,
   touchWorkspace, SEP,
 } from "./workspace-engine.js";
 
@@ -26,6 +26,7 @@ export class Palette extends Workspace {
     this.checkoutParent = new Map();
     this.pressed = null; // the space row held by the mouse
     this.over = null;    // the space row it would land on
+    this.pressGroup = null; // the group the held row is drawn in: a drop stays inside it
     this.note = null;    // the footer's word about the last step
     this.active = spaces().find((s) => s.active) ?? null;
     this.folder = place(this.active);
@@ -459,9 +460,11 @@ export class Palette extends Workspace {
     cx?.notify?.();
   }
 
-  // Ctrl+Shift+J/K: the sheet steps through every space of the machine; the
-  // sidebar's sections are not its order. A worktree checkout steps inside its
-  // repo group, through the persisted worktree order.
+  // Ctrl+Shift+J/K: a space steps inside the group it is drawn in — the Pinned
+  // ribbon or one status section, exactly as in the sidebar. A group is
+  // regrouped (a pin list, a status tick), so a step across its edge would not
+  // stay where it was put; reordering never pins or unpins. A worktree checkout
+  // steps inside its repo group, through the persisted worktree order.
   //
   // The subject is the space the reorder is about, not "whatever row the
   // highlight is on now". A row moves asynchronously, so a key press that lands
@@ -481,20 +484,20 @@ export class Palette extends Workspace {
     }
     const s = r?.kind === "space" ? r.s : null;
     if (!s) return;
+    // The row's own ribbon, not a guess from the space: a pinned place is drawn
+    // under Pinned even while a stale frame still has it in its status section.
+    const group = placeGroup(s, Boolean(r.inPins) || Boolean(this.spacePin(s)));
     this.startReorder(s, dir, {
-      // The overview's order, not the ranked one: pinned places in the order
-      // they were pinned, then the rest in the app's order. With a search on,
-      // the drawn rows are ranked, and a step read from those would reverse
-      // itself.
-      ids: (list = spaces()) => {
-        const mine = list.filter((x) => (x.machine ?? null) === (s.machine ?? null) && !this.isWorktree(x));
-        const held = new Set(mine.map((x) => x.id));
-        const pinned = this.shownPins(list)
-          .filter(({ p, s: hit }) => (p.machine ?? null) === (s.machine ?? null) && hit && held.has(hit.id))
-          .map(({ s: hit }) => hit.id);
-        const seen = new Set(pinned);
-        return [...pinned, ...mine.map((x) => x.id).filter((id) => !seen.has(id))];
-      },
+      // One group's places, in the order the group draws them. Read from the
+      // predicted list, never the drawn rows: a `space.move` lands
+      // asynchronously and a search draws a ranked list.
+      ids: (list = spaces()) => groupPlaces(list, this.shownPins(list), group,
+        s.machine ?? null, (x) => this.isWorktree(x)).map((x) => x.id),
+      // The ribbon's slots, one per pin row: a pinned step passes the row of a
+      // place whose shell exited too, so one press is always one row.
+      pins: group === "pinned"
+        ? (list = spaces()) => ribbonPins(this.shownPins(list), (x) => this.isWorktree(x))
+        : null,
       after: (moved, step, total) => {
         this.follow = moved.id;
         if (this.filter.trim()) this.note = `${moved.name} \u00b7 ${step} of ${total}`;
@@ -527,10 +530,24 @@ export class Palette extends Workspace {
     });
   }
 
-  // The sheet reads pinned spaces above the rest, so crossing that line is a
-  // pin or an unpin: a step lands somewhere the list will draw.
-  landBefore(s, target) {
-    if (Boolean(this.spacePin(s)) !== Boolean(this.spacePin(target))) this.setPin(s);
+  // A drag lands where it was let go, through the same step the keys use.
+  landSpace(s, target, dir = 0, group = null) {
+    if (!s || !target || this.isWorktree(s) || this.isWorktree(target)) return null;
+    if ((s.machine ?? null) !== (target.machine ?? null)) return null;
+    const all = this.liveSpaces(this.paneSnap);
+    const g = group ?? placeGroup(s, Boolean(this.spacePin(s)));
+    const ids = groupPlaces(all, this.shownPins(all), g, s.machine ?? null, (x) => this.isWorktree(x)).map((x) => x.id);
+    // The drop's side comes from the group's own order, not the raw app order:
+    // Pinned rows are drawn in pin order, and a status group is drawn in app
+    // order; reading the other one puts the drop line on the wrong side.
+    if (!dir) {
+      const a = ids.indexOf(s.id), b = ids.indexOf(target.id);
+      if (a < 0 || b < 0) return null;
+      dir = b > a ? 1 : -1;
+    }
+    const place = this.landReorder(s, target, ids, dir);
+    if (place !== null) this.follow = s.id;
+    return place;
   }
 
   // A worktree space keeps its checkout's name: the branch it was made for, from
@@ -634,43 +651,28 @@ export class Palette extends Workspace {
       if (y >= v.tops[i] && y < v.tops[i] + h) { hit = v.rows[i]; break; }
     }
     const from = this.liveSpaces(this.paneSnap).find((x) => x.id === this.pressed);
-    const same = hit && hit.kind === "space" && !this.isWorktree(hit.s) && (hit.s.machine ?? null) === (from?.machine ?? null);
+    const group = this.pressGroup ?? (from ? placeGroup(from, Boolean(this.spacePin(from))) : null);
+    const same = hit && hit.kind === "space" && !this.isWorktree(hit.s)
+      && (hit.s.machine ?? null) === (from?.machine ?? null)
+      && group != null
+      && placeGroup(hit.s, Boolean(hit.inPins) || Boolean(this.spacePin(hit.s))) === group;
     const id = same ? hit.s.id : null;
     if (this.over !== id) { this.over = id; cx.notify(); }
   }
 
   // A release anywhere in the list finishes a drag the rows did not see.
   dropRow(cx) {
-    const from = this.pressed, over = this.over;
+    const from = this.pressed, over = this.over, group = this.pressGroup;
     this.pressed = null;
     this.over = null;
+    this.pressGroup = null;
     if (from !== null && over && over !== from) {
       const all = this.liveSpaces(this.paneSnap);
-      const machine = all.find((y) => y.id === from)?.machine ?? null;
-      // The visual list: spaces of this machine, no worktrees. `space.move`
-      // indexes this list, not the raw `spaces()` array.
-      const order = all.filter((x) => (x.machine ?? null) === machine && !this.isWorktree(x)).map((x) => x.id);
-      // Dropped onto a row below its own: it goes after that row, the side the
-      // drop line was drawn on.
-      const a = order.indexOf(from), b = order.indexOf(over);
-      if (a >= 0 && b >= 0) this.landSpace(all.find((x) => x.id === from), all.find((x) => x.id === over), b > a ? 1 : -1);
+      const s = all.find((x) => x.id === from);
+      const target = all.find((x) => x.id === over);
+      if (s && target) this.landSpace(s, target, 0, group);
     }
     cx.notify();
-  }
-
-  // Put `s` where `target` is. Pinned spaces read above the rest, so landing on
-  // the other side of that line is a pin or an unpin: never a drop that does
-  // nothing.
-  // A drag lands where it was let go, through the same step the keys use.
-  landSpace(s, target, dir = 0) {
-    if (!s || !target || this.isWorktree(s) || this.isWorktree(target)) return null;
-    if ((s.machine ?? null) !== (target.machine ?? null)) return null;
-    const ids = this.liveSpaces(this.paneSnap)
-      .filter((x) => (x.machine ?? null) === (s.machine ?? null) && !this.isWorktree(x))
-      .map((x) => x.id);
-    const place = this.landReorder(s, target, ids, dir);
-    if (place !== null) this.follow = s.id;
-    return place;
   }
 
   // The tile, and — where the section does not already say it — the space's state
@@ -852,33 +854,29 @@ export class Palette extends Workspace {
           ))
           .on_mouse_down("left", (_e, cx) => {
             if (this.isWorktree(s)) return;
-            this.pressed = s.id; this.over = s.id; cx.notify();
-          })
-          .on_mouse_move((_e, cx) => {
-            if (this.isWorktree(s)) {
-              if (this.over === s.id) { this.over = null; cx.notify(); }
-              return;
-            }
-            const from = this.liveSpaces(this.paneSnap).find((x) => x.id === this.pressed);
-            const same = from && (from.machine ?? null) === (s.machine ?? null);
-            if (this.pressed !== null && same && this.over !== s.id) { this.over = s.id; cx.notify(); }
+            this.pressed = s.id;
+            this.over = s.id;
+            this.pressGroup = placeGroup(s, Boolean(r.inPins) || Boolean(this.spacePin(s)));
+            cx.notify();
           })
           .on_mouse_up("left", (_e, cx) => {
             if (this.isWorktree(s)) {
               const from = this.pressed;
               this.pressed = null;
               this.over = null;
+              this.pressGroup = null;
               if (from == null) this.openRow(this.paletteRow(r));
               cx.notify();
               return;
             }
-            const from = this.pressed, over = this.over;
+            const from = this.pressed, over = this.over, group = this.pressGroup;
             this.pressed = null;
             this.over = null;
+            this.pressGroup = null;
             if (from === s.id) this.openRow(this.paletteRow(r));
             else if (from !== null && over === s.id) {
               const live = this.liveSpaces(this.paneSnap);
-              this.landSpace(live.find((x) => x.id === from), s);
+              this.landSpace(live.find((x) => x.id === from), s, 0, group);
             }
             cx.notify();
           })
@@ -1028,6 +1026,7 @@ export class Palette extends Workspace {
         if (this.pressed === null) return;
         this.pressed = null;
         this.over = null;
+        this.pressGroup = null;
         cx.notify();
       })
       .on_key_up((e) => { if (e.key === "j" || e.key === "k") this.stopReorder(); })

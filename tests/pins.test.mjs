@@ -126,7 +126,7 @@ const check = (label, ok, extra = "") => {
   const pinKey = new Function("norm", `${top("mods/agents-list/workspace-engine.js", "pinKey")}; return pinKey;`)(norm);
   const samePin = new Function("pinKey", `${top("mods/agents-list/workspace-engine.js", "samePin")}; return samePin;`)(pinKey);
   const pinnedList = top("mods/agents-list/workspace-engine.js", "pinnedList");
-  const cls = ["spacePin", "setPin", "bindPins", "movePinRow"].map((m) => method("mods/agents-list/workspace-engine.js", m)
+  const cls = ["spacePin", "setPin", "bindPins", "movePinSlot", "movePinRow"].map((m) => method("mods/agents-list/workspace-engine.js", m)
     .replace(`function ${m}`, m)).join("\n");
   const palette = new Function("shared", "setShared", "spaces", "norm", "pinnedList", "pinKey", "samePin",
     "place", "writePins", "spaceAt", "spaceRecord", "groupKeyOf", "spaceColors", `${pinnedList}

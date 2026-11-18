@@ -11,7 +11,7 @@ import {
   onGitRefresh, takeGitAsk, touchWorkspace, listedCheckouts, pictureKey,
   beginPaint, endPaint, frameCache, spaceRecord, pinSpace, persistWorkspace, spaceRead, inside,
   checkoutRecordOf, groupKeyOf, worktreeSiblings, movePathWithin, machineIndexOf,
-  orderedPaths, orderedPlaces, SEP,
+  orderedPaths, orderedPlaces, ribbonPins, SEP,
 } from "./workspace-engine.js";
 
 // The block that shows a given mod, and the column around it.
@@ -1469,6 +1469,7 @@ export class Sidebar extends Workspace {
     const s = targetRow?.kind === "space" ? targetRow.s : null;
     const sect = e?.sect;
     if (!s || sect == null) return;
+    const pinned = /pinned$/.test(String(sect));
     this.startReorder(s, dir, {
       // The section's rows in the order the app will have, not the order the
       // last paint drew: a step lands asynchronously, and the neighbour read
@@ -1478,10 +1479,15 @@ export class Sidebar extends Workspace {
       // about it.
       ids: (list = spaces()) => {
         const drawn = this.drawnSpaces(sect).map((x) => x.id);
-        if (/pinned$/.test(String(sect))) return drawn;
+        if (pinned) return drawn;
         const rank = new Map((list ?? []).map((x, i) => [x.id, i]));
         return drawn.sort((a, b) => (rank.get(a) ?? 0) - (rank.get(b) ?? 0));
       },
+      // The ribbon's slots, one per pin row: a pinned step passes the row of a
+      // place whose shell exited too, so one press is always one row.
+      pins: pinned
+        ? (list = spaces()) => ribbonPins(this.shownPins(list), (x) => this.isWorktree(x))
+        : null,
       after: (moved) => { this.sel = `sp-${moved.id}`; },
     }, cx);
   }
@@ -2659,7 +2665,7 @@ export class Sidebar extends Workspace {
 
       // One space, drawn the way the default list draws it: avatar (a branch for
       // a worktree), the name as given, and only what's unusual on the right.
-      const spaceRow = (s, kids, depth, sect) => {
+      const spaceRow = (s, kids, depth, sect, places = null) => {
         const id = `sp-${s.id}`;
         const open = !this.folded.has(id);
         const g = info.get(s.id);
@@ -2676,9 +2682,16 @@ export class Sidebar extends Workspace {
         const top = kids.reduce((m, a) => ((RANK[a.status] ?? 0) > (RANK[m] ?? 0) ? a.status : m), null);
         const topTone = top === "blocked" ? t.blocked : top === "done" ? t.done : top === "working" ? t.accent : null;
         const label = placeName(s, sect);
-        const index = tree ? groupRank(s.id, forest.parents.get(s.id)) : allSpaces.indexOf(s);
+        // `places` is the section's own order: Pinned rows follow the pin list,
+        // a status section the app's order inside it. The drop line must use that
+        // order, not `allSpaces` (a pin order and the app order differ the moment
+        // a pinned row is moved, and the line would flip sides under the drag).
+        const index = tree ? groupRank(s.id, forest.parents.get(s.id))
+          : places ? places.findIndex((x) => x.id === s.id) : allSpaces.indexOf(s);
         const from = this.pressed === null ? -1
-          : (tree && this.pressParent != null ? groupRank(this.pressed, this.pressParent) : allSpaces.findIndex((x) => x.id === this.pressed));
+          : (tree && this.pressParent != null ? groupRank(this.pressed, this.pressParent)
+            : places && !this.pressTree ? places.findIndex((x) => x.id === this.pressed)
+              : allSpaces.findIndex((x) => x.id === this.pressed));
         // The drop line belongs to the drag's own list: a space in its section
         // and on its machine, a worktree among its repo's worktrees.
         const overHere = this.pressed !== null && this.over === s.id && this.pressed !== s.id
@@ -2919,11 +2932,11 @@ export class Sidebar extends Workspace {
       const out = [];
       const order = [];
       const sections = new Set();
-      const emitSpace = (s, depth, sect) => {
+      const emitSpace = (s, depth, sect, places = null) => {
         const kids = kidsOf.get(s.id) ?? [];
         const id = `sp-${s.id}`;
         const open = !this.folded.has(id);
-        out.push(spaceRow(s, kids, depth, sect));
+        out.push(spaceRow(s, kids, depth, sect, places));
         this.entries.push({ key: id, kind: "space", id: s.id, name: placeName(s, sect), linked: forest.worktrees.has(s.id), sect, at: out.length - 1 });
         if (!open) return;
         kids.forEach((a, i) => {
@@ -3122,9 +3135,13 @@ export class Sidebar extends Workspace {
           const id = manyMachines ? `${mid}-pinned` : "sec-pinned";
           out.push(sectionHeader(id, "Pinned", "accent", pins.length));
           if (!this.folded.has(id)) {
+            // The live places of this ribbon, in the pin order the rows are
+            // drawn: the drag's line and the step's neighbours read this, never
+            // the app's order (the two differ as soon as a pin is moved).
+            const pinPlaces = pins.filter(({ s }) => s && !forest.worktrees.has(s.id)).map(({ s }) => s);
             // Their worktrees come with them: a pinned repo brings its checkouts.
             for (const { p, s } of pins) {
-              if (s && !forest.worktrees.has(s.id)) { emitSpace(s, 0, id); continue; }
+              if (s && !forest.worktrees.has(s.id)) { emitSpace(s, 0, id, pinPlaces); continue; }
               const key = `pin-${p.machine ?? ""}-${norm(p.folder)}`;
               out.push(pinSpaceRow(p));
               this.entries.push({ key, kind: "pin", pin: { ...p, machine: p.machine ?? null }, at: out.length - 1 });
@@ -3147,7 +3164,7 @@ export class Sidebar extends Workspace {
           if (!members.length) continue;
           const id = manyMachines ? `${mid}-sec-${r}` : `sec-${r}`;
           out.push(sectionHeader(id, SECTION[r], SECTION_STATUS[r], members.length));
-          if (!this.folded.has(id)) members.forEach((s) => emitSpace(s, 0, id));
+          if (!this.folded.has(id)) members.forEach((s) => emitSpace(s, 0, id, members));
         }
         // A checkout with no space to hang under — opened as a space, or only
         // listed. The sheet lists these too; leaving them out here is how the two

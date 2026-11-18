@@ -804,6 +804,35 @@ export function placeCount(all = [], pins = [], isWorktree = () => false) {
   return live + waiting;
 }
 
+// The group a reorder stays inside: the Pinned ribbon, or one status section.
+// The ribbon has its own order (the pin list), and a status section is regrouped
+// on every status tick, so a row moved across either line would not stay where
+// it was put. `pinned` is the row's own section, never a guess from the space.
+export const placeGroup = (s, pinned = false) => (pinned ? "pinned" : String(RANK[s?.status ?? "idle"] ?? RANK.idle));
+
+// One group's places, in the order that group draws them: a pinned place in the
+// order the pins were made, a status section in the app's order inside it.
+// Agents, worktrees and unopened checkouts are not places here.
+export function groupPlaces(all, pins, group, machine = null, isWorktree = () => false) {
+  const mine = (all ?? []).filter((s) => (s.machine ?? null) === (machine ?? null) && !isWorktree(s));
+  const pinnedLive = new Set((pins ?? []).filter(({ s }) => s).map(({ s }) => s.id));
+  if (group === "pinned") {
+    const live = new Set(mine.map((s) => s.id));
+    return (pins ?? []).filter(({ p, s }) => (p.machine ?? null) === (machine ?? null) && s && live.has(s.id))
+      .map(({ s }) => s);
+  }
+  return mine.filter((s) => !pinnedLive.has(s.id) && placeGroup(s) === group);
+}
+
+// The slots the Pinned ribbon draws: one row per pin — a live place, or a place
+// whose space has exited — minus a pinned worktree, which is drawn under its
+// repo instead. A step goes through these slots, so one press always moves a row
+// by one: stepping through the live places only skipped the empty row and made
+// the press after it jump two rows at once.
+export function ribbonPins(pins, isWorktree = () => false) {
+  return (pins ?? []).filter(({ s }) => !s || !isWorktree(s));
+}
+
 // A pinned space is never closed. The same rule, spelled the same way, in the
 // sidebar, the dialogs and here: a pin names its space by id, or — pins saved
 // before ids — by the place it was pinned at.
@@ -1024,6 +1053,7 @@ export class Workspace extends View {
     this.reorderRaw = null;
     this.reorderRawAt = 0;
     this.reorderIds = null;
+    this.reorderPins = null;
     this.reorderAfter = null;
     this.pathHold = null;
     this.pathDir = 0;
@@ -1595,8 +1625,9 @@ export class Workspace extends View {
   }
 
   // One step of a reorder, and the held repeat that follows it. The scope (which
-  // spaces are being stepped through) is the caller's: the sheet steps through
-  // every space, the sidebar only through the section under the selected row.
+  // rows are being stepped through) is the caller's: both views step inside the
+  // group the row is drawn in, never across its edge. A pinned row steps through
+  // the ribbon's slots (`opts.pins`), a status row through its section's places.
   startReorder(s, dir, opts, cx) {
     if (!s || !dir) return;
     this.stopReorder();
@@ -1604,8 +1635,11 @@ export class Workspace extends View {
     this.reorderDir = dir;
     this.reorderSteps = 0;
     this.reorderIds = opts.ids;
+    this.reorderPins = opts.pins ?? null;
     this.reorderAfter = opts.after ?? null;
-    this.reorderStep(s, dir);
+    // Nothing to step (the end of the group) means nothing to repeat: a hold
+    // that kept repainting for a move it cannot make is a flicker, not a step.
+    if (!this.reorderStep(s, dir)) return;
     // Holding the key repeats the step here, not through the OS key repeat: the
     // repeat events are ignored (see `chord`), so there is exactly one source of
     // steps and the speed is the same on every desktop.
@@ -1613,7 +1647,7 @@ export class Workspace extends View {
       this.reorderHold = cx2.timer.every(90, (cx3) => {
         const live = spaces().find((x) => x.id === this.reorderId);
         if (!live || ++this.reorderSteps > 600) return this.stopReorder();
-        this.reorderStep(live, this.reorderDir);
+        if (!this.reorderStep(live, this.reorderDir)) return this.stopReorder();
         cx3.notify();
       });
     }) ?? null;
@@ -1670,10 +1704,24 @@ export class Workspace extends View {
     return fresh && Array.isArray(ids) && ids.length === live.length && ids.every((id) => live.includes(id)) ? ids : live;
   }
 
-  // Put `s` where `target` is, in `ids`. Pinned spaces read above the rest in
-  // the sheet, so landing on the other side of that line is a pin or an unpin:
-  // never a drop that does nothing. Returns the space's place in the aim, 1-based.
+  // Put `s` where `target` is, in `ids`. `ids` is the group's own order: a
+  // status row moves in the app's order inside its section, so a step lands
+  // exactly where the row is drawn. Returns the space's place in the aim,
+  // 1-based. A pinned drag comes here too; a pinned *step* goes through
+  // `pinnedStep`, because the ribbon also has slots with no live space.
   landReorder(s, target, ids, dir = 0) {
+    const place = this.moveSpaceWithin(s, target, ids, dir);
+    if (place === null) return null;
+    // The Pinned section reads the pin list, so a move between two pinned rows
+    // moves the pin too: `space.move` alone would reorder Herdr's spaces and
+    // leave the row drawn where it was.
+    this.movePinRow(s, target, dir);
+    return place;
+  }
+
+  // The `space.move` half of a step: fold the move into the aim, send it, and
+  // advance the prediction. Returns the place in the aim, 1-based.
+  moveSpaceWithin(s, target, ids, dir = 0) {
     if (!s || !target || s.id === target.id) return null;
     // `space.move` is scoped to one machine's block; a drop onto another
     // machine is not a move, and there is no index to give it.
@@ -1686,11 +1734,6 @@ export class Workspace extends View {
     if (ti < 0) return null;
     const cut = ti + (dir > 0 ? 1 : 0);
     this.reorderAim = [...rest.slice(0, cut), s.id, ...rest.slice(cut)];
-    this.landBefore(s, target);
-    // The Pinned section reads the pin list, so a move inside it has to move the
-    // pin too: `space.move` alone would reorder Herdr's spaces and leave the row
-    // drawn where it was.
-    this.movePinRow(s, target, dir);
     // The drop row maps back to the *machine-scoped* position, never the raw
     // index in spaces(): the sidebar draws sections, filter, and nested rows.
     run("space.move", { id: s.id, index: at });
@@ -1698,30 +1741,35 @@ export class Workspace extends View {
     return this.reorderAim.indexOf(s.id) + 1;
   }
 
-  // The sheet toggles a pin when a step crosses the pinned line; the sidebar's
-  // sections already keep pins apart, so it does nothing. One hook, overridden.
-  landBefore() {}
-
   // A pin keeps the slot it was given, and both views draw the Pinned section
-  // from the pin list, so a move between two pins moves the pin. Moving by value
-  // (`samePin`), never by index: `landBefore` may just have written a pin.
+  // from the pin list, so a drag between two pins moves the pin. Moving by value
+  // (`samePin`), never by index.
   movePinRow(s, target, dir) {
     const mine = this.spacePin(s);
     const theirs = this.spacePin(target);
     if (!mine || !theirs) return false;
+    return this.movePinSlot(mine, theirs, dir);
+  }
+
+  // One pin, one slot: `pin` takes the place next to `neighbour`, in `dir`, in
+  // the pin list both views draw. The neighbour may be a pin whose space has
+  // exited — its row is still there, so a step has to be able to pass it.
+  movePinSlot(pin, neighbour, dir) {
+    if (!pin || !neighbour) return false;
     const list = pinnedList();
-    const at = list.findIndex((p) => samePin(p, mine));
+    const at = list.findIndex((p) => samePin(p, pin));
     if (at < 0) return false;
     const [held] = list.splice(at, 1);
-    const to = list.findIndex((p) => samePin(p, theirs));
+    const to = list.findIndex((p) => samePin(p, neighbour));
     if (to < 0) { list.splice(at, 0, held); return false; }
     list.splice(to + (dir > 0 ? 1 : 0), 0, held);
-    writePins(list, `moved ${s.name ?? s.id}`);
+    writePins(list, `moved ${pin.name ?? pin.id ?? pin.folder}`);
     return true;
   }
 
   reorderStep(s, dir) {
-    if (!s || !dir || !this.reorderIds) return;
+    if (!s || !dir || !this.reorderIds) return null;
+    if (this.reorderPins) return this.pinnedStep(s, dir);
     // Read the aim before stamping this step: aimedReorder asks how long ago the
     // LAST one was.
     const list = this.predictedSpaces();
@@ -1729,10 +1777,40 @@ export class Workspace extends View {
     this.reorderStepAt = Date.now();
     const at = ids.indexOf(s.id);
     const target = at < 0 ? null : list.find((x) => x.id === ids[at + dir]) ?? null;
-    // The end of the order: not a wrap, and nothing to say.
-    if (!target) return;
+    // The end of the group: not a wrap, and nothing to say.
+    if (!target) return null;
     const step = this.landReorder(s, target, ids, dir);
     if (step) this.reorderAfter?.(s, step, ids.length);
+    return step;
+  }
+
+  // A pinned row steps through the ribbon's slots, not through the live places:
+  // the ribbon draws a row for every pin, and a pin whose shell exited keeps its
+  // row. Stepping the live places only skipped that row, so the press after it
+  // jumped two rows at once.
+  pinnedStep(s, dir) {
+    // The aim first: `aimedReorder` asks how long ago the LAST step was.
+    const list = this.predictedSpaces();
+    const ids = this.aimedReorder();
+    this.reorderStepAt = Date.now();
+    const slots = this.reorderPins?.(list) ?? [];
+    // The pin of this row, found the way the view found it: by the space it
+    // stands for. A pin saved before pins had ids has no id to ask `spacePin`.
+    const mine = slots.find(({ s: live }) => live?.id === s.id)?.p ?? null;
+    if (!mine) return null;
+    const at = slots.findIndex(({ p }) => samePin(p, mine));
+    const next = at < 0 ? null : slots[at + dir] ?? null;
+    // The end of the ribbon: not a wrap, and nothing to say.
+    if (!next) return null;
+    if (!this.movePinSlot(mine, next.p, dir)) return null;
+    // `space.move` follows only when that slot still holds a space: an empty
+    // place has no index to give the app, and the pin move is the whole step.
+    if (next.s) this.moveSpaceWithin(s, next.s, ids, dir);
+    const after = this.reorderPins?.(this.predictedSpaces()) ?? slots;
+    const place = after.findIndex(({ p }) => samePin(p, mine)) + 1;
+    if (!place) return null;
+    this.reorderAfter?.(s, place, after.length);
+    return place;
   }
 
   // One step of a worktree reorder, and the held repeat. Worktrees are not
@@ -1783,6 +1861,7 @@ export class Workspace extends View {
     this.pathHold = null;
     this.pathDir = 0;
     this.reorderDir = 0;
+    this.reorderPins = null;
     // `reorderId` and `pathNow` stay behind on purpose: a press that lands
     // before the next paint still has to move the row this reorder is about,
     // not whatever row its old index points at now. `reorderSubject` and
