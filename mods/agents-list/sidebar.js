@@ -14,6 +14,22 @@ import {
   orderedPaths, orderedPlaces, ribbonPins, SEP,
 } from "./workspace-engine.js";
 
+// Close a space once. A deleted folder and a removed checkout are noticed by
+// more than one sweep at the same moment; the first claim closes it, the rest
+// skip instead of asking the app to close a space that is already gone (which
+// posts a "space.close failed" toast that stays on screen).
+function closeSpace(id) {
+  if (!id || !spaces().some((s) => s.id === id)) return false;
+  const now = Date.now();
+  const claims = shared("space.closing") ?? {};
+  if (claims[id] && now - claims[id] < 15000) return false;
+  const next = { ...claims, [id]: now };
+  for (const [key, at] of Object.entries(next)) if (now - at > 60000) delete next[key];
+  setShared("space.closing", next);
+  run("space.close", { id, confirmed: true });
+  return true;
+}
+
 // The block that shows a given mod, and the column around it.
 function columnOf(node, mod, parent = null) {
   if (node?.content?.mod === mod) return parent;
@@ -739,6 +755,13 @@ export class Sidebar extends Workspace {
       delete this.spacePins[id];
       changed = true;
     }
+    // A record another copy wrote after this one hydrated is not in the map
+    // above. Read the file's keys too, or the ghost rides along until a reload.
+    for (const id of Object.keys(shared("workspace.state")?.spaces ?? {})) {
+      if (live.has(id)) continue;
+      delete this.spacePins[id];
+      changed = true;
+    }
     for (const s of all) {
       // The live place, never the folder the space was made in: a space made in
       // `reel` and used at `~` is at `~`, and must not wear reel's repo tail.
@@ -768,9 +791,9 @@ export class Sidebar extends Workspace {
   }
 
   // A worktree checkout git no longer lists must not leave its space behind.
-  // The picture hides it everywhere at once; this only ends an unpinned space
-  // after a grace, the way a deleted folder is ended. A pinned space is never
-  // closed: it keeps running, hidden, and comes back if the checkout does.
+  // The picture hides it everywhere at once; this ends the space after a grace,
+  // the way a deleted folder is ended. A pin does not keep it: a worktree is a
+  // checkout, not a place to pin, so a removed checkout takes its space with it.
   sweepRemoved(cx) {
     const rows = frameCache("spaces", spaces);
     const removed = this.removedWorktrees(rows, frameCache("panes", panes));
@@ -781,10 +804,14 @@ export class Sidebar extends Workspace {
     for (const s of rows) {
       if (!removed.has(s.id)) continue;
       if (!seen.has(s.id)) { seen.set(s.id, now); continue; }
-      if (now - seen.get(s.id) < 6000 || isPinned(s)) continue;
+      if (now - seen.get(s.id) < 6000) continue;
       seen.delete(s.id);
       closed = true;
-      run("space.close", { id: s.id, confirmed: true });
+      // A pin on a checkout goes with the checkout: the row it named is gone,
+      // and leaving it behind would only offer to rebuild what was removed.
+      const p = pinnedList().find((x) => x.id === s.id);
+      if (p) this.unpinPin(p);
+      closeSpace(s.id);
     }
     if (closed) cx.notify();
   }
@@ -981,7 +1008,7 @@ export class Sidebar extends Workspace {
     const path = tidyPath(job.top);
     const windows = window()?.platform === "windows";
     const closeSpaces = () => {
-      for (const id of job.spaces ?? []) run("space.close", { id, confirmed: true });
+      for (const id of job.spaces ?? []) closeSpace(id);
     };
     // Windows only: a live shell keeps the folder busy, so its spaces go first.
     if (windows) closeSpaces();

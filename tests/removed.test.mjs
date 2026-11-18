@@ -84,8 +84,11 @@ check("a removed worktree's pin row goes too",
   /shownPins\(all = spaces\(\), ps = null\) \{[\s\S]{0,400}!\(p\?\.id && removed\.has\(p\.id\)\)/.test(engine)
   && /this\.shownPins\(spaceList, paneList\)/.test(sidebar)
   && /this\.shownPins\(all, ps\)/.test(palette));
-check("an unpinned removed space is closed after a grace, a pinned one is kept",
-  /now - seen\.get\(s\.id\) < 6000 \|\| isPinned\(s\)/.test(sidebar));
+check("a removed space is closed after a grace, pinned or not",
+  /if \(now - seen\.get\(s\.id\) < 6000\) continue;/.test(sidebar)
+  && /closeSpace\(s\.id\)/.test(sidebar));
+check("a removed worktree's own pin goes with it",
+  /const p = pinnedList\(\)\.find\(\(x\) => x\.id === s\.id\);[\s\S]{0,80}this\.unpinPin\(p\);/.test(sidebar));
 
 if (failures) {
   console.error(`\n${failures} removed-worktree check(s) failed`);

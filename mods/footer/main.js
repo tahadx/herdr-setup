@@ -28,6 +28,28 @@ const isPinned = (s) => Boolean(s?.id) && pinnedList().some((p) => (p.id
 
 const activeSpace = () => spaces().find((s) => s.active) ?? null;
 
+// Close a space once. The sidebar, the top bar and this footer all watch for a
+// folder that is gone; the first claim closes it, the rest skip instead of
+// closing a space that no longer exists (which posts "space.close failed").
+const closeSpace = (id) => {
+  if (!id || !spaces().some((s) => s.id === id)) return false;
+  const now = Date.now();
+  const claims = shared("space.closing") ?? {};
+  if (claims[id] && now - claims[id] < 15000) return false;
+  const next = { ...claims, [id]: now };
+  for (const [key, at] of Object.entries(next)) if (now - at > 60000) delete next[key];
+  setShared("space.closing", next);
+  run("space.close", { id, confirmed: true });
+  return true;
+};
+
+// A worktree is a checkout, not a place to pin. The sticky record says whether
+// this space is one even after its folder is gone.
+const isWorktreeSpace = (s) => {
+  const rec = shared("workspace.state")?.spaces?.[s?.id];
+  return Boolean(rec?.isWorktree) || /(?:^|\/)worktrees\/[^/]+\/[^/]+\/?$/.test(norm(s?.folder));
+};
+
 // Swap the sidebar with the work column, and the panel with the terminal pane.
 function flipLayout() {
   const tree = JSON.parse(JSON.stringify(layout() ?? {}));
@@ -93,8 +115,9 @@ export default class Status extends View {
     for (const s of gone) {
       // A pinned space is never closed, whatever happened to its folder: that is
       // what pinning means. It stays in the list, named "(deleted)", until the
-      // person unpins it.
-      if (isPinned(s)) {
+      // person unpins it. A worktree is the exception: a checkout is not a place
+      // to pin, so a pin on one does not keep a folder git has already removed.
+      if (isPinned(s) && !isWorktreeSpace(s)) {
         if (!kept.has(s.id)) {
           kept.add(s.id);
           notify({ title: "Pinned space kept", body: `${s.name} stays. Pinned spaces are never closed; unpin it if the folder is really gone.` });
@@ -104,7 +127,7 @@ export default class Status extends View {
       if (now - (seen.get(s.id) ?? now) < 6000) continue;
       seen.delete(s.id);
       this.dropPin(s);
-      run("space.close", { id: s.id, confirmed: true });
+      closeSpace(s.id);
     }
   }
 

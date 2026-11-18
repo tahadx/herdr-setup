@@ -421,11 +421,22 @@ export function persistWorkspace(force = false) {
     order: workspace.order,
   };
   const json = JSON.stringify(state);
-  // If the file still holds a key this build cannot address, write once more:
-  // the whole `workspace.state` is replaced, which is how the stale entry goes.
+  // The file can hold a picture this copy never had: a space record written by
+  // another copy, a key from an older build, or an edit between restarts.
+  // Compare with what is actually there, not only with the last write, so a
+  // ghost (a removed worktree's record) is corrected instead of riding along
+  // until a reload.
   const raw = workspaceState();
-  const stale = ["git", "trees"].some((name) =>
-    Object.keys(asObject(raw[name]) ?? {}).some((key) => !key.includes(SEP)))
+  const rawState = {
+    rev: workspace.rev ?? 0,
+    git: clean(asObject(raw.git)),
+    trees: clean(asObject(raw.trees)),
+    spaces: asObject(raw.spaces) ?? {},
+    order: asObject(raw.order) ?? {},
+  };
+  const stale = JSON.stringify(rawState) !== json
+    || ["git", "trees"].some((name) =>
+      Object.keys(asObject(raw[name]) ?? {}).some((key) => !key.includes(SEP)))
     || Object.keys(asObject(raw.order) ?? {}).some((key) => !key.includes(SEP));
   if (json === workspace.saved && !stale) return false;
   workspace.saved = json;

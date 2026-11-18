@@ -9,14 +9,29 @@ const wash = (c, a = "14") => (/^#[0-9a-fA-F]{6}$/.test(c ?? "") ? c + a : c);
 
 // A pin protects the space it names, and only that space: the close dialog
 // refuses it, but a worktree removal still deletes the checkout and stopping an
-// agent still ends the agent. A pinned space standing in a checkout that goes
-// stays behind (its folder is gone, the space is not). A pin names its space by
+// agent still ends the agent. A space standing in a checkout that goes goes with
+// it, pinned or not: a worktree is not a place to pin. A pin names its space by
 // id, or — pins saved before ids — by its machine and folder.
 const norm = (p) => (p ?? "").replace(/\\/g, "/").replace(/\/+$/, "");
 const pinnedList = () => (Array.isArray(shared("spaces.pinned")) ? shared("spaces.pinned") : []);
 const isPinned = (s) => Boolean(s?.id) && pinnedList().some((p) => (p.id
   ? p.id === s.id
   : (p.machine ?? null) === (s.machine ?? null) && norm(p.folder) === norm(s.folder)));
+
+// Close a space once. A removal and a sweep can reach the same space; the first
+// claim closes it, the rest skip instead of closing a space that is already
+// gone (which posts "space.close failed").
+const closeSpace = (id) => {
+  if (!id || !spaces().some((s) => s.id === id)) return false;
+  const now = Date.now();
+  const claims = shared("space.closing") ?? {};
+  if (claims[id] && now - claims[id] < 15000) return false;
+  const next = { ...claims, [id]: now };
+  for (const [key, at] of Object.entries(next)) if (now - at > 60000) delete next[key];
+  setShared("space.closing", next);
+  run("space.close", { id, confirmed: true });
+  return true;
+};
 // Checkouts on their way out. One is hidden the moment the person confirms,
 // before git has done any work: removing a big checkout can take a while, and
 // the row must not sit there as if nothing happened. The sidebar runs the
@@ -280,7 +295,7 @@ export default class Worktree extends View {
       cx?.notify();
       return;
     }
-    if (s?.id) { this.dropPins(s); run("space.close", { id: s.id, confirmed: true }); }
+    if (s?.id) { this.dropPins(s); closeSpace(s.id); }
     this.close();
   }
 
@@ -330,7 +345,11 @@ export default class Worktree extends View {
   removeNow(cx) {
     const r = this.repo;
     if (!r?.linked) return; // the dialog never offers this
-    const closing = this.spacesIn(r.top).filter((s) => !isPinned(s));
+    // Every space in the checkout goes, pinned or not: a worktree is not a
+    // place to pin, and a pinned space in a folder git no longer has is a row
+    // nobody can close. A pin on the repo's main space is outside the checkout
+    // and stays.
+    const closing = this.spacesIn(r.top);
     const at = Date.now();
     const job = {
       at,
@@ -359,7 +378,7 @@ export default class Worktree extends View {
     this.detail = `Removing ${tilde(job.top, this.userHome ?? "")}…`;
     cx.notify();
     const closeSpaces = () => {
-      for (const id of job.spaces ?? []) run("space.close", { id, confirmed: true });
+      for (const id of job.spaces ?? []) closeSpace(id);
     };
     const windows = window()?.platform === "windows";
     if (windows) closeSpaces();

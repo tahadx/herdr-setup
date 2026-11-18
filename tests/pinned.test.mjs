@@ -1,10 +1,11 @@
-// A pinned space is never closed.
+// A pinned place is never closed; a worktree is not a place to pin.
 //
 // What this guards:
-//   - a pinned space whose folder goes is kept by the footer's sweep, instead of
-//     being closed and unpinned six seconds later;
-//   - no dialog closes one, while a worktree removal still deletes the checkout
-//     and leaves the pinned space (and its pin) standing;
+//   - a pinned place whose folder goes is kept by the footer's sweep, instead of
+//     being closed and unpinned six seconds later; a pinned worktree goes with
+//     its removed checkout, because a checkout is not a place to pin;
+//   - no dialog closes a pinned place, while a worktree removal deletes the
+//     checkout and takes every space inside it, pinned or not;
 //   - stopping an agent never takes its space with it: where the agent is the
 //     only thing in a space, a shell opens there first;
 //   - a removal only names a space when a space will actually go, so "Remove
@@ -90,18 +91,28 @@ for (const [mod, file] of [["footer", "main.js"], ["worktrees", "main.js"], ["ic
 // The behaviours themselves: each is a line of source, and each line is what
 // makes the rule true rather than only documented.
 const sweep = read("footer");
-check("the sweep keeps a pinned space instead of closing it",
-  /if \(isPinned\(s\)\) \{[\s\S]{0,600}?continue;/.test(sweep), "sweepGone must skip pinned spaces and not close them");
-check("the optional top bar's sweep keeps a pinned space too",
-  /if \(isPinned\(s\)\) continue;/.test(read("icons")), "the top bar must not break the pin promise");
+check("the sweep keeps a pinned place instead of closing it",
+  /if \(isPinned\(s\) && !isWorktreeSpace\(s\)\) \{[\s\S]{0,600}?continue;/.test(sweep), "sweepGone must skip pinned places and not close them");
+check("the optional top bar's sweep keeps a pinned place too",
+  /if \(isPinned\(s\) && !isWorktreeSpace\(s\)\) continue;/.test(read("icons")), "the top bar must not break the pin promise");
+check("a pinned worktree is not a place, so its removed folder still goes",
+  /const rec = shared\("workspace\.state"\)\?\.spaces\?\.\[s\?\.id\];[\s\S]{0,120}isWorktree/.test(sweep)
+  && /if \(isPinned\(s\) && !isWorktreeSpace\(s\)\)/.test(sweep)
+  && /if \(isPinned\(s\) && !isWorktreeSpace\(s\)\) continue;/.test(read("icons")));
+check("every sweep closes through one claim",
+  ["footer", "icons", "worktrees"].every((mod) =>
+    /const closeSpace = \(id\) => \{[\s\S]{0,500}shared\("space\.closing"\)/.test(read(mod)))
+  && /function closeSpace\(id\) \{[\s\S]{0,500}shared\("space\.closing"\)/.test(read("agents-list", "sidebar.js")));
 
 const worktree = read("worktrees");
 check("closing a space refuses while pinned",
   /removeSpace\(cx\) \{[\s\S]{0,160}if \(isPinned\(s\)\)/.test(worktree));
-// A pin protects the space, never the checkout it lives in: removing a worktree
-// stays on offer, and only the spaces that are not pinned go with it.
-check("removing a worktree closes only the spaces that are not pinned",
-  /const closing = this\.spacesIn\(r\.top\)\.filter\(\(s\) => !isPinned\(s\)\)/.test(worktree));
+// A pin protects a place, never the checkout it lives in: removing a worktree
+// takes every space inside it, pinned or not. A pin on the repo's main space is
+// outside the checkout and stays.
+check("removing a worktree closes every space in it, pinned or not",
+  /const closing = this\.spacesIn\(r\.top\);/.test(worktree)
+  && !/spacesIn\(r\.top\)\.filter\(\(s\) => !isPinned\(s\)\)/.test(worktree));
 check("the removal dialog offers a pinned space's checkout instead of refusing",
   !/Removing this checkout would end/.test(worktree));
 check("a pin whose space survives a removal stays",
@@ -164,7 +175,7 @@ check("an agent can be stopped from the sidebar's menu, whatever its space's pin
 {
   const at = sidebar.indexOf("  async runWorktreeJob(");
   const end = sidebar.indexOf("\n  }", at) + 4;
-  const runJob = new Function("exec", "run", "setShared", "notify", "window", "removingList", "tidyPath", "persistWorkspace",
+  const runJob = new Function("exec", "run", "setShared", "notify", "window", "removingList", "tidyPath", "persistWorkspace", "closeSpace",
     `${sidebar.slice(at, end).replace("  async runWorktreeJob(", "async function runWorktreeJob(")}
      return runWorktreeJob;`);
   const go = async (code) => {
@@ -184,6 +195,7 @@ check("an agent can be stopped from the sidebar's menu, whatever its space's pin
       () => [],
       (p) => p,
       () => false,
+      (id) => calls.closed.push(["space.close", id]),
     ).call(self, { at: 1, top: "/w", main: "/repo", on: null, force: false, spaces: ["s1"], pins: [{ id: "a" }] }, { notify() {} });
     return { calls, self };
   };

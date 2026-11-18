@@ -53,6 +53,28 @@ function flipLayout() {
 
 const activeSpace = () => spaces().find((s) => s.active) ?? null;
 
+// Close a space once. The sidebar, this bar and the footer all watch for a
+// folder that is gone; the first claim closes it, the rest skip instead of
+// closing a space that no longer exists (which posts "space.close failed").
+const closeSpace = (id) => {
+  if (!id || !spaces().some((s) => s.id === id)) return false;
+  const now = Date.now();
+  const claims = shared("space.closing") ?? {};
+  if (claims[id] && now - claims[id] < 15000) return false;
+  const next = { ...claims, [id]: now };
+  for (const [key, at] of Object.entries(next)) if (now - at > 60000) delete next[key];
+  setShared("space.closing", next);
+  run("space.close", { id, confirmed: true });
+  return true;
+};
+
+// A worktree is a checkout, not a place to pin. The sticky record says whether
+// this space is one even after its folder is gone.
+const isWorktreeSpace = (s) => {
+  const rec = shared("workspace.state")?.spaces?.[s?.id];
+  return Boolean(rec?.isWorktree) || /(?:^|\/)worktrees\/[^/]+\/[^/]+\/?$/.test(norm(s?.folder));
+};
+
 const MARK = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b7cf6", ansi2: "#3fae6a", ansi1: "#d9649a" };
 const PROJECT_COLORS = ["ansi6", "ansi3", "ansi4", "ansi5", "ansi2", "ansi1"];
 
@@ -126,11 +148,13 @@ export default class WorkspaceChrome extends View {
     for (const id of [...seen.keys()]) if (!gone.some((s) => s.id === id)) seen.delete(id);
     for (const s of gone) {
       // The pin is the promise: a pinned space stays, even with its folder gone.
-      if (isPinned(s)) continue;
+      // A worktree is the exception: a checkout is not a place to pin, so a pin
+      // on one does not keep a folder git has already removed.
+      if (isPinned(s) && !isWorktreeSpace(s)) continue;
       if (now - (seen.get(s.id) ?? now) < 6000) continue;
       seen.delete(s.id);
       this.dropPin(s);
-      run("space.close", { id: s.id, confirmed: true });
+      closeSpace(s.id);
     }
   }
 
