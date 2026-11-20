@@ -1417,6 +1417,13 @@ export class Workspace extends View {
   // place the person is working. True means a space was made; false means an
   // existing place was opened.
   newSpace() {
+    // The sheet is a place to choose where to work, never a place to stay. It
+    // cannot be trusted to notice the new id by repainting: its own render can
+    // be missed while it floats over the space it is about to leave, and then
+    // it sits there with a list that no longer has the space in it. A signal
+    // its timer watches closes it even when no frame arrives.
+    const signal = Math.max(Date.now(), (shared("search.close") ?? 0) + 1);
+    setShared("search.close", signal);
     const all = spaces();
     const ps = panes();
     const next = newSpaceFolder(all, ps);

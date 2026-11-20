@@ -175,12 +175,14 @@ check("a stale sheet read cannot overwrite a newer one",
   const end = core.indexOf("\n  }", at) + 4;
   const build = (folder, all) => {
     const calls = [];
-    const fn = new Function("newSpaceFolder", "spaces", "spaceRecord", "norm", "place", "panes", "run",
+    const signals = [];
+    const fn = new Function("newSpaceFolder", "spaces", "spaceRecord", "norm", "place", "panes", "run", "shared", "setShared",
       `${core.slice(at, end).replace("  newSpace() {", "function newSpace() {")}; return newSpace;`)(
       () => folder, () => all, (s) => s.record ?? null, norm,
-      (s) => s.live ?? s.folder, () => [], (name, args) => calls.push([name, args]));
+      (s) => s.live ?? s.folder, () => [], (name, args) => calls.push([name, args]),
+      () => 0, (key, value) => signals.push([key, value]));
     const self = { paneSnap: [], openSpace: (s) => calls.push(["openSpace", s.id]) };
-    return { made: fn.call(self), calls };
+    return { made: fn.call(self), calls, signals };
   };
   const wt = { id: "w", name: "typing", folder: "/wt", machine: null, record: { isWorktree: true } };
   const place = { id: "p", name: "reel", folder: "/repo", machine: null, record: { isWorktree: false } };
@@ -203,6 +205,23 @@ check("a stale sheet read cannot overwrite a newer one",
   check("the sidebar's New space uses the shared place rule",
     /if \(c === "new_space"\) \{ if \(this\.newSpace\(\)/.test(sidebar)
     && /"New space", \(\) => this\.newSpace\(\)/.test(sidebar));
+
+  // The sheet cannot be left floating over the space it just made: a missed
+  // render kept it open (and sometimes empty) with an old list. The sidebar
+  // raises a signal before it moves, and the sheet's timer closes on it.
+  go = build(null, [wt]);
+  check("a new space raises the sheet's close signal, before it moves",
+    go.signals[0]?.[0] === "search.close" && go.signals[0]?.[1] > 0,
+    JSON.stringify(go.signals));
+  check("the sheet closes on that signal from its timer, not its next frame",
+    /shared\("search\.close"\)/.test(palette)
+      && /closeAt !== this\.closeAt/.test(palette)
+      && /this\.close\(\); return;/.test(palette));
+  check("the sheet's timer closes on a space made by any path",
+    /const idsNow = spaces\(\)\.map/.test(palette)
+      && /idsNow\.some\(\(id\) => !this\.seen\.has\(id\)\)/.test(palette));
+  check("the sheet also closes a new id once the frame is out",
+    /cx\.timer\.after\(0, \(\) => closeOverlay\(overlay\)\)/.test(palette));
 }
 
 // A main space that leaves its repo for a folder with no repo is that folder

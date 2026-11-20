@@ -28,7 +28,15 @@ export class Palette extends Workspace {
     this.over = null;    // the space row it would land on
     this.pressGroup = null; // the group the held row is drawn in: a drop stays inside it
     this.note = null;    // the footer's word about the last step
-    this.active = spaces().find((s) => s.active) ?? null;
+    const openedWith = spaces();
+    this.active = openedWith.find((s) => s.active) ?? null;
+    // What the sheet opened on. A space made between this line and the first
+    // frame is still new to the person and closes the sheet; without it the
+    // first render would take the new space for one that was already there.
+    this.seen = new Set(openedWith.map((s) => s.id));
+    // The sidebar's "new space" signal: a timer, not a render, closes on it.
+    this.closeAt = shared("search.close") ?? 0;
+    this.overlay = _props?.overlay ?? null;
     this.folder = place(this.active);
     this.on = this.active?.machine ?? null;
     // A checkout made before this sheet opened is already in the shared list.
@@ -64,6 +72,21 @@ export class Palette extends Workspace {
     let closed = shared("overlay.closed");
     let seenRev = shared("workspace.rev") ?? 0;
     cx.timer.every(250, (cx) => {
+      // A new space from the sidebar is a place to go, so the sheet goes. The
+      // sidebar raises this signal because the overlay cannot depend on its own
+      // render arriving before the space does (a missed frame left the sheet
+      // floating over the new space with an old list).
+      const closeAt = shared("search.close") ?? 0;
+      if (closeAt !== this.closeAt) { this.closeAt = closeAt; this.close(); return; }
+      // The same rule for a space made by any other path (the app's own command
+      // or a terminal): the overlay's paint is not guaranteed, so compare the
+      // live ids here rather than trusting the last frame to notice.
+      const idsNow = spaces().map((s) => s.id);
+      if (idsNow.some((id) => !this.seen.has(id))) {
+        this.seen = new Set(idsNow);
+        this.close();
+        return;
+      }
       const now = shared("overlay.closed");
       const rev = shared("workspace.rev") ?? 0;
       if (now !== closed) { closed = now; seenRev = rev; this.handle.focus(); cx.notify(); }
@@ -107,7 +130,10 @@ export class Palette extends Workspace {
     this.filter = "";
     this.follow = null;
     this.stopReorder();
-    if (!cx) closeOverlay(props()?.overlay);
+    if (!cx) {
+      const overlay = this.overlay ?? props()?.overlay;
+      if (overlay) closeOverlay(overlay);
+    }
   }
 
   // Typing: every term has to land somewhere, and terms may land in different
@@ -716,6 +742,11 @@ export class Palette extends Workspace {
     if (this.seen && ids.some((id) => !this.seen.has(id))) {
       this.seen = new Set(ids);
       this.close();
+      // Closing during a paint can be lost with the frame that asked for it:
+      // the dialog then stays on screen, empty, over the space it should have
+      // gone to. Ask again once this frame is out, by the id it was opened with.
+      const overlay = this.overlay ?? props()?.overlay;
+      if (overlay) cx.timer.after(0, () => closeOverlay(overlay));
       return div();
     }
     this.seen = new Set(ids);

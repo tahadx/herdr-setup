@@ -113,7 +113,9 @@ actually standing there when one is — because a space inside the checkout woul
 be drawn as another worktree row instead of a place. A shell that has `cd`'d out
 of the worktree keeps Herdr's own default, the folder it is in now. The sidebar's
 `+`, its "New space" row, `N`, `Alt+Shift+N` and the layout's `Ctrl+Shift+N` all
-take this rule.
+take this rule. The search sheet is a chooser, so it closes onto the place it
+made — even when the sheet's own repaint is missed, its timer sees the new space
+by id and cannot stay over it with an old list.
 
 **A pinned space is never closed, and nothing else is protected with it.** The pin
 is the promise: the sidebar's two-second sweep skips a pinned space even when its

@@ -54,7 +54,8 @@ its edge between 44 and 480 px.
   uncommitted marks; the row's menu makes, opens and removes them.
 - **New space is a place.** Made while you are in a worktree it starts in the
   repo's main checkout — or goes to the space already open there — instead of
-  becoming another row in the same checkout.
+  becoming another row in the same checkout. The search sheet closes onto the
+  place it made, so it never sits over the new space with an old list.
 - **Pins first**, then the rest. Click a row to go there, right-click for its
   menu.
 - **A bar of its own.** When a list outgrows its box, a 3 px accent thumb runs
